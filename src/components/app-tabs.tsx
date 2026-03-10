@@ -1,33 +1,44 @@
-import { NativeTabs } from 'expo-router/unstable-native-tabs';
-import React from 'react';
-import { useColorScheme } from 'react-native';
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { NativeTabs } from "expo-router/unstable-native-tabs";
+import React from "react";
 
-import { Colors } from '@/constants/theme';
+const { Icon, Label, VectorIcon } = NativeTabs.Trigger;
 
-export default function AppTabs() {
-  const scheme = useColorScheme();
-  const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
-
+export default function TabLayout() {
   return (
-    <NativeTabs
-      backgroundColor={colors.background}
-      indicatorColor={colors.backgroundElement}
-      labelStyle={{ selected: { color: colors.text } }}>
+    <NativeTabs tintColor="#FF6B00">
       <NativeTabs.Trigger name="index">
-        <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/home.png')}
-          renderingMode="template"
+        <Icon
+          sf="house.fill"
+          src={<VectorIcon family={MaterialIcons} name="home" />}
         />
+        <Label>Home</Label>
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="explore">
-        <NativeTabs.Trigger.Label>Explore</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/explore.png')}
-          renderingMode="template"
+      <NativeTabs.Trigger name="favorites">
+        <Icon
+          sf="star.fill"
+          src={<VectorIcon family={MaterialIcons} name="star" />}
         />
+        <Label>Favorites</Label>
       </NativeTabs.Trigger>
+
+       <NativeTabs.Trigger name="news">
+        <Icon
+          sf="newspaper.fill"
+          src={<VectorIcon family={MaterialIcons} name="newspaper" />}
+        />
+        <Label>News</Label>
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="search" role="search">
+        <Icon
+          sf="magnifyingglass"
+          src={<VectorIcon family={MaterialIcons} name="search" />}
+        />
+        <Label>Search</Label>
+      </NativeTabs.Trigger>
+
     </NativeTabs>
   );
 }

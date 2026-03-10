@@ -7,8 +7,14 @@
     "icon": "./assets/images/icon.png",
     "scheme": "ovrtime",
     "userInterfaceStyle": "automatic",
+    "backgroundColor": "#000000",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.semekor.k.OVRTIME",
+      "infoPlist": {
+        "NSSupportsLiveActivities": true,
+        "NSSupportsLiveActivitiesFrequentUpdates": true
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -19,12 +25,14 @@
       },
       "predictiveBackGestureEnabled": false
     },
-    "web": {
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
-    },
     "plugins": [
       "expo-router",
+      [
+        "expo-widgets",
+        {
+          "widgetsSrc": "src/widgets"
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -39,6 +47,7 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "owner": "semekork"
   }
 }
