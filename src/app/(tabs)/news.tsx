@@ -132,7 +132,12 @@ export default function NewsScreen() {
 
       {/* Category Filter */}
       {categories.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterBar} contentInsetAdjustmentBehavior="automatic">
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterBar}
+          contentInsetAdjustmentBehavior="automatic"
+        >
           <TouchableOpacity
             style={[styles.filterChip, !filter && styles.filterChipActive]}
             onPress={() => setFilter(null)}
