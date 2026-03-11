@@ -14,6 +14,7 @@ export type FavoriteMatch = {
   awayColor: string;
   league: string;
   leagueLogo: string | null;
+  leagueId?: string; // for navigation to match detail
   date: string; // ISO string
 };
 
