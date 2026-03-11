@@ -6,19 +6,23 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'expo-router';
+import Animated, { SharedTransition } from 'react-native-reanimated';
 import { toggleFavorite, type FavoriteMatch } from '@/utils/favorites';
 import { HOME_FETCH_LEAGUES, getLeagueById } from '@/utils/leagues';
 import { getRefreshInterval, getHideSpoilers, settingsEmitter } from '@/utils/settings';
 import { useInterval } from '@/hooks/use-interval';
 import { hasActiveActivity } from '@/utils/liveActivity';
+import { C } from '@/constants/theme';
 
-const ACCENT = '#FF6B00';
-const BG = '#000000';
-const SURFACE = '#121212';
-const BORDER = '#222222';
-const TEXT = '#FFFFFF';
-const TEXT_MUTED = '#888888';
-const LIVE_COLOR = '#FF3B30';
+const springTransition = SharedTransition.springify().damping(20).stiffness(200);
+
+const ACCENT = C.accent;
+const BG = C.bg;
+const SURFACE = C.surface;
+const BORDER = C.border;
+const TEXT = C.text;
+const TEXT_MUTED = C.textMuted;
+const LIVE_COLOR = C.live;
 
 const toLocalQueryDate = (d: Date) => {
   const y = d.getFullYear();
@@ -325,7 +329,11 @@ export default function HomeScreen() {
 
                   <View style={styles.matchContent}>
                     <View style={styles.team}>
-                      <View style={[styles.logoPlaceholder, { borderColor: `#${liveMatch.home.color}` }]}>
+                      <Animated.View
+                        sharedTransitionTag={`match-home-logo-${liveMatch.id}`}
+                        sharedTransitionStyle={springTransition}
+                        style={[styles.logoPlaceholder, { borderColor: `#${liveMatch.home.color}` }]}
+                      >
                         {liveMatch.home.logo ? (
                           <Image
                             source={{ uri: liveMatch.home.logo }}
@@ -335,7 +343,7 @@ export default function HomeScreen() {
                         ) : (
                           <ThemedText style={styles.logoTextChar}>{liveMatch.home.abbrev.charAt(0)}</ThemedText>
                         )}
-                      </View>
+                      </Animated.View>
                       <ThemedText style={styles.teamName}>{liveMatch.home.abbrev}</ThemedText>
                     </View>
 
@@ -350,7 +358,11 @@ export default function HomeScreen() {
                     </View>
 
                     <View style={styles.team}>
-                      <View style={[styles.logoPlaceholder, { borderColor: `#${liveMatch.away.color}` }]}>
+                      <Animated.View
+                        sharedTransitionTag={`match-away-logo-${liveMatch.id}`}
+                        sharedTransitionStyle={springTransition}
+                        style={[styles.logoPlaceholder, { borderColor: `#${liveMatch.away.color}` }]}
+                      >
                         {liveMatch.away.logo ? (
                           <Image
                             source={{ uri: liveMatch.away.logo }}
@@ -360,7 +372,7 @@ export default function HomeScreen() {
                         ) : (
                           <ThemedText style={styles.logoTextChar}>{liveMatch.away.abbrev.charAt(0)}</ThemedText>
                         )}
-                      </View>
+                      </Animated.View>
                       <ThemedText style={styles.teamName}>{liveMatch.away.abbrev}</ThemedText>
                     </View>
                   </View>
@@ -445,7 +457,11 @@ export default function HomeScreen() {
                       </View>
                       <View style={styles.eventTeams}>
                         <View style={styles.eventTeamRow}>
-                          <View style={[styles.smallLogo, { overflow: 'hidden' }]}>
+                          <Animated.View
+                            sharedTransitionTag={`match-home-logo-${evt.id}`}
+                            sharedTransitionStyle={springTransition}
+                            style={[styles.smallLogo, { overflow: 'hidden' }]}
+                          >
                             {evt.home.logo && (
                               <Image
                                 source={{ uri: evt.home.logo }}
@@ -453,7 +469,7 @@ export default function HomeScreen() {
                                 contentFit="contain"
                               />
                             )}
-                          </View>
+                          </Animated.View>
                           <ThemedText style={styles.eventTeamName}>{evt.home.abbrev}</ThemedText>
                           {evt.status.state !== 'pre' && (
                             <ThemedText style={{ marginLeft: 'auto', fontWeight: '800', color: TEXT }}>
@@ -462,7 +478,11 @@ export default function HomeScreen() {
                           )}
                         </View>
                         <View style={styles.eventTeamRow}>
-                          <View style={[styles.smallLogo, { overflow: 'hidden' }]}>
+                          <Animated.View
+                            sharedTransitionTag={`match-away-logo-${evt.id}`}
+                            sharedTransitionStyle={springTransition}
+                            style={[styles.smallLogo, { overflow: 'hidden' }]}
+                          >
                             {evt.away.logo && (
                               <Image
                                 source={{ uri: evt.away.logo }}
@@ -470,7 +490,7 @@ export default function HomeScreen() {
                                 contentFit="contain"
                               />
                             )}
-                          </View>
+                          </Animated.View>
                           <ThemedText style={styles.eventTeamName}>{evt.away.abbrev}</ThemedText>
                           {evt.status.state !== 'pre' && (
                             <ThemedText style={{ marginLeft: 'auto', fontWeight: '800', color: TEXT }}>
@@ -516,11 +536,15 @@ export default function HomeScreen() {
                     onPress={() => router.push(`/league/${league.id}`)}
                   >
                     <View style={styles.leagueRowLeft}>
-                      <View style={styles.leagueIcon}>
+                      <Animated.View
+                        sharedTransitionTag={`league-logo-${league.id}`}
+                        sharedTransitionStyle={springTransition}
+                        style={styles.leagueIcon}
+                      >
                         {league.logo && (
                           <Image source={{ uri: league.logo }} style={{ width: 28, height: 28 }} contentFit="contain" />
                         )}
-                      </View>
+                      </Animated.View>
                       <View>
                         <ThemedText style={styles.leagueName}>{league.name}</ThemedText>
                         {league.country ? <ThemedText style={styles.leagueCountry}>{league.country}</ThemedText> : null}
