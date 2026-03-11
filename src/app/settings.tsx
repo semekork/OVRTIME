@@ -15,15 +15,16 @@ import { Stack, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Linking, Platform, ScrollView, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { C } from '@/constants/theme';
 
-const ACCENT = '#FF6B00';
-const BG = '#000000';
-const SURFACE = '#111111';
-const BORDER = '#1E1E1E';
-const TEXT = '#FFFFFF';
-const TEXT_MUTED = '#666666';
-const TEXT_SECONDARY = '#999999';
-const DESTRUCTIVE = '#FF3B30';
+const ACCENT = C.accent;
+const BG = C.bg;
+const SURFACE = C.surface;
+const BORDER = C.border;
+const TEXT = C.text;
+const TEXT_MUTED = C.textMuted;
+const TEXT_SECONDARY = C.textSecondary;
+const DESTRUCTIVE = C.destructive;
 
 const APP_VERSION = '1.0.0';
 const INTERVALS: RefreshInterval[] = [5, 30, 60, 300, 0];
