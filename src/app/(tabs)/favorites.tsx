@@ -1,23 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  StyleSheet,
-  View,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-} from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
+import { useRouter } from 'expo-router';
+import { Icon } from '@/components/icon';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import {
-  getFavorites,
-  removeFavorite,
-  favoritesEmitter,
-  type FavoriteMatch,
-} from '@/utils/favorites';
+import { getFavorites, removeFavorite, favoritesEmitter, type FavoriteMatch } from '@/utils/favorites';
 
 const ACCENT = '#FF6B00';
 const BG = '#000000';
@@ -37,6 +26,7 @@ function formatMatchStatus(match: FavoriteMatch): string {
 
 export default function FavoritesScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [favorites, setFavorites] = useState<FavoriteMatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -50,7 +40,9 @@ export default function FavoritesScreen() {
   useEffect(() => {
     loadFavorites();
     const unsub = favoritesEmitter.subscribe(loadFavorites);
-    return () => { unsub(); };
+    return () => {
+      unsub();
+    };
   }, [loadFavorites]);
 
   const onRefresh = async () => {
@@ -90,37 +82,23 @@ export default function FavoritesScreen() {
         </View>
       ) : favorites.length === 0 ? (
         <View style={styles.emptyState}>
-          <SymbolView name="star" tintColor={TEXT_MUTED} size={52} />
+          <Icon sf="star" material="star-border" size={52} color={TEXT_MUTED} />
           <ThemedText style={styles.emptyTitle}>No favorites yet</ThemedText>
-          <ThemedText style={styles.emptySubtitle}>
-            Tap the star on any match{'\n'}to save it here
-          </ThemedText>
+          <ThemedText style={styles.emptySubtitle}>Tap the star on any match{'\n'}to save it here</ThemedText>
         </View>
       ) : (
         <ScrollView
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: insets.bottom + 100 },
-          ]}
+          contentInsetAdjustmentBehavior="automatic"
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
           showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={ACCENT}
-            />
-          }
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={ACCENT} />}
         >
           {grouped.map(([league, matches]) => (
             <View key={league} style={styles.leagueSection}>
               {/* League header */}
               <View style={styles.leagueHeader}>
                 {matches[0].leagueLogo && (
-                  <Image
-                    source={{ uri: matches[0].leagueLogo }}
-                    style={styles.leagueLogo}
-                    contentFit="contain"
-                  />
+                  <Image source={{ uri: matches[0].leagueLogo }} style={styles.leagueLogo} contentFit="contain" />
                 )}
                 <ThemedText style={styles.leagueName}>{league}</ThemedText>
                 <ThemedText style={styles.leagueCount}>{matches.length}</ThemedText>
@@ -129,28 +107,24 @@ export default function FavoritesScreen() {
               {/* Matches */}
               <View style={styles.matchGroup}>
                 {matches.map((match, idx) => (
-                  <View
+                  <TouchableOpacity
                     key={match.id}
-                    style={[
-                      styles.matchRow,
-                      idx < matches.length - 1 && styles.matchRowBorder,
-                    ]}
+                    style={[styles.matchRow, idx < matches.length - 1 && styles.matchRowBorder]}
+                    activeOpacity={0.75}
+                    onPress={() => {
+                      if (match.leagueId) {
+                        router.push(`/match/${match.id}?leagueId=${match.leagueId}`);
+                      }
+                    }}
                   >
                     <View style={styles.matchDateTime}>
-                      <ThemedText style={styles.matchDate}>
-                        {formatMatchStatus(match)}
-                      </ThemedText>
+                      <ThemedText style={styles.matchDate}>{formatMatchStatus(match)}</ThemedText>
                     </View>
 
                     {/* Away team */}
                     <View style={styles.teamsSection}>
                       <View style={styles.teamRow}>
-                        <View
-                          style={[
-                            styles.teamLogo,
-                            { backgroundColor: `#${match.homeColor}` },
-                          ]}
-                        >
+                        <View style={[styles.teamLogo, { backgroundColor: `#${match.homeColor}` }]}>
                           {match.homeLogo ? (
                             <Image
                               source={{ uri: match.homeLogo }}
@@ -159,9 +133,7 @@ export default function FavoritesScreen() {
                             />
                           ) : null}
                         </View>
-                        <ThemedText style={styles.teamName}>
-                          {match.homeTeam}
-                        </ThemedText>
+                        <ThemedText style={styles.teamName}>{match.homeTeam}</ThemedText>
                       </View>
 
                       <View style={styles.vsRow}>
@@ -169,12 +141,7 @@ export default function FavoritesScreen() {
                       </View>
 
                       <View style={styles.teamRow}>
-                        <View
-                          style={[
-                            styles.teamLogo,
-                            { backgroundColor: `#${match.awayColor}` },
-                          ]}
-                        >
+                        <View style={[styles.teamLogo, { backgroundColor: `#${match.awayColor}` }]}>
                           {match.awayLogo ? (
                             <Image
                               source={{ uri: match.awayLogo }}
@@ -183,9 +150,7 @@ export default function FavoritesScreen() {
                             />
                           ) : null}
                         </View>
-                        <ThemedText style={styles.teamName}>
-                          {match.awayTeam}
-                        </ThemedText>
+                        <ThemedText style={styles.teamName}>{match.awayTeam}</ThemedText>
                       </View>
                     </View>
 
@@ -195,9 +160,9 @@ export default function FavoritesScreen() {
                       onPress={() => handleUnfavorite(match.id)}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
-                      <SymbolView name="star.fill" tintColor={ACCENT} size={18} />
+                      <Icon sf="star.fill" material="star" color={ACCENT} size={18} />
                     </TouchableOpacity>
-                  </View>
+                  </TouchableOpacity>
                 ))}
               </View>
             </View>
