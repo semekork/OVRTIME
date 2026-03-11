@@ -1,18 +1,20 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import {
-  View, ScrollView, StyleSheet, TouchableOpacity, Switch, Alert, Linking,
-} from 'react-native';
-import { Stack } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Icon } from '@/components/icon';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import {
-  getRefreshInterval, setRefreshInterval, getHideSpoilers, setHideSpoilers,
-  REFRESH_INTERVAL_LABELS, type RefreshInterval,
-} from '@/utils/settings';
 import { getFavorites } from '@/utils/favorites';
+import {
+  getHideSpoilers,
+  getRefreshInterval,
+  REFRESH_INTERVAL_LABELS,
+  setHideSpoilers,
+  setRefreshInterval,
+  type RefreshInterval,
+} from '@/utils/settings';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Stack, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Alert, Linking, Platform, ScrollView, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const ACCENT = '#FF6B00';
 const BG = '#000000';
@@ -28,22 +30,21 @@ const INTERVALS: RefreshInterval[] = [5, 30, 60, 300, 0];
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [refreshInterval, setRefreshIntervalState] = useState<RefreshInterval>(5);
   const [hideSpoilers, setHideSpoilersState] = useState(false);
   const [favCount, setFavCount] = useState(0);
 
   const load = useCallback(async () => {
-    const [ri, hs, favs] = await Promise.all([
-      getRefreshInterval(),
-      getHideSpoilers(),
-      getFavorites(),
-    ]);
+    const [ri, hs, favs] = await Promise.all([getRefreshInterval(), getHideSpoilers(), getFavorites()]);
     setRefreshIntervalState(ri);
     setHideSpoilersState(hs);
     setFavCount(favs.length);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const handleIntervalChange = async (val: RefreshInterval) => {
     setRefreshIntervalState(val);
@@ -56,21 +57,17 @@ export default function SettingsScreen() {
   };
 
   const handleClearFavorites = () => {
-    Alert.alert(
-      'Clear Favorites',
-      `Remove all ${favCount} saved matches?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear All',
-          style: 'destructive',
-          onPress: async () => {
-            await AsyncStorage.removeItem('@ovrtime_favorites');
-            setFavCount(0);
-          },
+    Alert.alert('Clear Favorites', `Remove all ${favCount} saved matches?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Clear All',
+        style: 'destructive',
+        onPress: async () => {
+          await AsyncStorage.removeItem('@ovrtime_favorites');
+          setFavCount(0);
         },
-      ]
-    );
+      },
+    ]);
   };
 
   return (
@@ -82,16 +79,33 @@ export default function SettingsScreen() {
           headerStyle: { backgroundColor: BG },
           headerTintColor: TEXT,
           headerTitleStyle: { fontWeight: '700' },
-          headerBackTitle: '',
-          headerLargeTitle: true,
-          headerLargeTitleStyle: { color: TEXT },
+          headerBackTitle: 'Back',
+          headerBackButtonDisplayMode: 'minimal',
+          ...(Platform.OS === 'ios'
+            ? {
+                headerLargeTitle: false,
+                headerLargeTitleStyle: { color: TEXT },
+                headerTransparent: true,
+                headerBlurEffect: 'dark',
+              }
+            : {
+                headerLeft: () => (
+                  <TouchableOpacity
+                    onPress={() => router.back()}
+                    style={{ paddingHorizontal: 12, paddingVertical: 8 }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Icon sf="chevron.left" material="arrow-back" size={22} color={TEXT} />
+                  </TouchableOpacity>
+                ),
+              }),
         }}
       />
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 80 }]}
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 20 }]}
         showsVerticalScrollIndicator={false}
       >
-
         {/* Scores */}
         <ThemedText style={styles.sectionLabel}>Scores</ThemedText>
         <View style={styles.group}>
@@ -120,9 +134,7 @@ export default function SettingsScreen() {
               activeOpacity={0.7}
             >
               <ThemedText style={styles.rowLabel}>{REFRESH_INTERVAL_LABELS[interval]}</ThemedText>
-              {refreshInterval === interval && (
-                <SymbolView name="checkmark" tintColor={ACCENT} size={16} />
-              )}
+              {refreshInterval === interval && <Icon sf="checkmark" material="check" size={16} color={ACCENT} />}
             </TouchableOpacity>
           ))}
         </View>
@@ -167,10 +179,13 @@ export default function SettingsScreen() {
             activeOpacity={0.7}
           >
             <ThemedText style={styles.rowLabel}>Send Feedback</ThemedText>
-            <SymbolView name="chevron.right" tintColor={TEXT_MUTED} size={14} />
+            <Icon sf="chevron.right" material="chevron-right" size={14} color={TEXT_MUTED} />
           </TouchableOpacity>
+          <View style={[styles.row, styles.rowBorder]}>
+            <ThemedText style={styles.rowLabel}>Owner</ThemedText>
+            <ThemedText style={styles.rowSub}>JumpSpaces</ThemedText>
+          </View>
         </View>
-
       </ScrollView>
     </ThemedView>
   );
@@ -178,26 +193,42 @@ export default function SettingsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: BG },
-  scroll: { paddingTop: 8 },
+  scroll: { paddingTop: 0 },
   sectionLabel: {
-    fontSize: 12, fontWeight: '600', color: TEXT_SECONDARY,
-    textTransform: 'uppercase', letterSpacing: 0.5,
-    paddingHorizontal: 16, paddingTop: 20, paddingBottom: 6,
+    fontSize: 12,
+    fontWeight: '600',
+    color: TEXT_SECONDARY,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 6,
   },
   group: {
-    marginHorizontal: 16, backgroundColor: SURFACE,
-    borderRadius: 10, borderWidth: 1, borderColor: BORDER, overflow: 'hidden',
+    marginHorizontal: 16,
+    backgroundColor: SURFACE,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: BORDER,
+    overflow: 'hidden',
   },
   row: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 14, gap: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
   },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: BORDER },
   rowLeft: { flex: 1 },
   rowLabel: { fontSize: 15, fontWeight: '500', color: TEXT },
   rowSub: { fontSize: 12, color: TEXT_MUTED, marginTop: 2 },
   hint: {
-    fontSize: 12, color: TEXT_MUTED, paddingHorizontal: 20,
-    paddingTop: 8, lineHeight: 18,
+    fontSize: 12,
+    color: TEXT_MUTED,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    lineHeight: 18,
   },
 });
