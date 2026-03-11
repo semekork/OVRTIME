@@ -77,6 +77,7 @@ type MatchDetail = {
   headlines?: string;
   keyEvents: KeyEvent[];
   lineups: Lineups | null;
+  h2h: H2HMatch[];
 };
 
 type H2HMatch = {
@@ -97,12 +98,20 @@ async function fetchMatchDetail(leagueId: string, eventId: string): Promise<Matc
 
     const getTeam = (homeAway: 'home' | 'away'): TeamInfo => {
       const c = comp.competitors.find((x: any) => x.homeAway === homeAway) || comp.competitors[0];
+      // ESPN summary API exposes logo at team.logos[0].href or team.logo (scoreboard)
+      const logo =
+        c.team?.logos?.[0]?.href ||
+        c.team?.logo ||
+        null;
+      // Normalise color — strip leading '#' so we store a bare hex string
+      const rawColor: string = c.team?.color || 'FFFFFF';
+      const color = rawColor.startsWith('#') ? rawColor.slice(1) : rawColor;
       return {
         id: c.team?.id || '',
         name: c.team?.displayName || c.team?.name || 'TBD',
         abbrev: c.team?.abbreviation || 'TBD',
-        logo: c.team?.logo || null,
-        color: c.team?.color || 'FFFFFF',
+        logo,
+        color,
         score: c.score ?? '0',
       };
     };
@@ -112,12 +121,13 @@ async function fetchMatchDetail(leagueId: string, eventId: string): Promise<Matc
 
     // Extract stats — keep home and away values separate
     const boxscore = data.boxscore;
-    if (boxscore?.stats) {
-      const homeStats = boxscore.stats.find((s: any) => s.team?.id === home.id || s.team?.homeAway === 'home');
-      const awayStats = boxscore.stats.find((s: any) => s.team?.id === away.id || s.team?.homeAway === 'away');
+    const boxscoreTeams = boxscore?.teams || boxscore?.stats || [];
+    if (boxscoreTeams.length > 0) {
+      const homeStats = boxscoreTeams.find((s: any) => s.team?.id === home.id || s.team?.homeAway === 'home');
+      const awayStats = boxscoreTeams.find((s: any) => s.team?.id === away.id || s.team?.homeAway === 'away');
 
-      const homeArr: any[] = homeStats?.stats || [];
-      const awayArr: any[] = awayStats?.stats || [];
+      const homeArr: any[] = homeStats?.statistics || homeStats?.stats || [];
+      const awayArr: any[] = awayStats?.statistics || awayStats?.stats || [];
 
       home.stats = homeArr.map((s: any, i: number) => ({
         name: s.name,
@@ -126,10 +136,10 @@ async function fetchMatchDetail(leagueId: string, eventId: string): Promise<Matc
       }));
     }
 
-    // Key events (plays)
+    // Key events (plays/events)
     const keyEvents: KeyEvent[] = [];
-    const plays: any[] = data.plays || [];
-    for (const play of plays) {
+    const sourceEvents: any[] = data.keyEvents || data.plays || [];
+    for (const play of sourceEvents) {
       const typeText: string = play.type?.text?.toLowerCase() || '';
       const homeTeamId = home.id;
       const teamId = play.team?.id;
@@ -175,6 +185,23 @@ async function fetchMatchDetail(leagueId: string, eventId: string): Promise<Matc
       };
     }
 
+    // H2H
+    const h2hGames: H2HMatch[] = [];
+    const h2hSource = data.headToHeadGames?.[0]?.games || [];
+    for (const g of h2hSource) {
+      if (g.gameResult) {
+        const isHomeSameAsCurrentHome = g.homeTeamId === home.id;
+        const h2hHome = isHomeSameAsCurrentHome ? home : away;
+        const h2hAway = isHomeSameAsCurrentHome ? away : home;
+        h2hGames.push({
+          date: new Date(g.gameDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+          home: { name: h2hHome.abbrev, score: g.homeTeamScore || '0', logo: h2hHome.logo },
+          away: { name: h2hAway.abbrev, score: g.awayTeamScore || '0', logo: h2hAway.logo },
+          competition: g.leagueAbbreviation || g.leagueName || '',
+        });
+      }
+    }
+
     return {
       id: eventId,
       statusState: comp.status?.type?.state || '',
@@ -189,47 +216,11 @@ async function fetchMatchDetail(leagueId: string, eventId: string): Promise<Matc
       headlines: data.article?.headline || data.header?.competitions?.[0]?.notes?.[0]?.headline,
       keyEvents,
       lineups,
+      h2h: h2hGames,
     };
   } catch (e) {
     console.error('fetchMatchDetail error', e);
     return null;
-  }
-}
-
-async function fetchH2H(homeTeamId: string, awayTeamId: string, leagueId: string): Promise<H2HMatch[]> {
-  try {
-    const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/${leagueId}/scoreboard?limit=200`);
-    const data = await res.json();
-    const h2h: H2HMatch[] = [];
-    for (const evt of data.events || []) {
-      const comps = evt.competitions?.[0]?.competitors || [];
-      const ids = comps.map((c: any) => c.team?.id);
-      if (ids.includes(homeTeamId) && ids.includes(awayTeamId)) {
-        const h = comps.find((c: any) => c.homeAway === 'home');
-        const a = comps.find((c: any) => c.homeAway === 'away');
-        h2h.push({
-          date: new Date(evt.date).toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-          }),
-          home: {
-            name: h?.team?.abbreviation || '?',
-            score: h?.score || '0',
-            logo: h?.team?.logo || null,
-          },
-          away: {
-            name: a?.team?.abbreviation || '?',
-            score: a?.score || '0',
-            logo: a?.team?.logo || null,
-          },
-          competition: data.leagues?.[0]?.name || leagueId,
-        });
-      }
-    }
-    return h2h.slice(0, 10);
-  } catch {
-    return [];
   }
 }
 
@@ -252,6 +243,279 @@ const EVENT_ICONS: Record<KeyEvent['type'], { sf: string; material: string; colo
   other: { sf: 'circle.fill', material: 'circle', color: TEXT_MUTED },
 };
 
+// ── TeamLogo ──────────────────────────────────────────────────────────────────
+function TeamLogo({
+  logo,
+  abbrev,
+  color,
+  size = 64,
+}: {
+  logo: string | null;
+  abbrev: string;
+  color: string;
+  size?: number;
+}) {
+  const borderColor = color && color !== 'FFFFFF' && color !== 'ffffff' ? `#${color}` : BORDER;
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: '#0A0A0A',
+        borderWidth: 2,
+        borderColor,
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+      }}
+    >
+      {logo ? (
+        <Image
+          source={{ uri: logo }}
+          style={{ width: size * 0.72, height: size * 0.72 }}
+          contentFit="contain"
+          cachePolicy="memory-disk"
+        />
+      ) : (
+        <ThemedText style={{ fontSize: size * 0.35, fontWeight: '800', color: TEXT }}>{abbrev.slice(0, 2)}</ThemedText>
+      )}
+    </View>
+  );
+}
+
+// ── PitchView ─────────────────────────────────────────────────────────────────
+function parseRows(formation: string | undefined, count: number): number[] {
+  if (formation) {
+    const parts = formation.split('-').map(Number).filter(Boolean);
+    if (parts.length > 0) return [1, ...parts];
+  }
+  // fallback: 1 GK + distribute the rest
+  const outfield = count - 1;
+  if (outfield <= 0) return [count];
+  if (outfield <= 4) return [1, outfield];
+  if (outfield <= 7) return [1, Math.ceil(outfield / 2), Math.floor(outfield / 2)];
+  return [1, 4, 3, 3];
+}
+
+function PitchView({
+  homePlayers,
+  awayPlayers,
+  homeFormation,
+  awayFormation,
+  homeAbbrev,
+  awayAbbrev,
+  homeColor,
+  awayColor,
+}: {
+  homePlayers: Player[];
+  awayPlayers: Player[];
+  homeFormation?: string;
+  awayFormation?: string;
+  homeAbbrev: string;
+  awayAbbrev: string;
+  homeColor: string;
+  awayColor: string;
+}) {
+  const homeRows = parseRows(homeFormation, homePlayers.length || 11);
+  const awayRows = parseRows(awayFormation, awayPlayers.length || 11);
+
+  const homeColor6 = homeColor && homeColor !== 'FFFFFF' && homeColor !== 'ffffff' ? `#${homeColor}` : ACCENT;
+  const awayColor6 = awayColor && awayColor !== 'FFFFFF' && awayColor !== 'ffffff' ? `#${awayColor}` : '#60a5fa';
+
+  let homeIdx = 0;
+  let awayIdx = 0;
+
+  return (
+    <View style={{ marginHorizontal: 16, marginBottom: 16 }}>
+      {/* Formation labels */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+        <ThemedText style={{ fontSize: 13, fontWeight: '700', color: TEXT }}>
+          {homeAbbrev}
+          {homeFormation ? `  ${homeFormation}` : ''}
+        </ThemedText>
+        <ThemedText style={{ fontSize: 13, fontWeight: '700', color: TEXT }}>
+          {awayFormation ? `${awayFormation}  ` : ''}
+          {awayAbbrev}
+        </ThemedText>
+      </View>
+
+      {/* Pitch */}
+      <View
+        style={{
+          backgroundColor: '#1A3A1A',
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: '#2D5A2D',
+          overflow: 'hidden',
+          paddingVertical: 12,
+        }}
+      >
+        {/* Centre line */}
+        <View
+          style={{
+            position: 'absolute',
+            left: '50%',
+            top: 0,
+            bottom: 0,
+            width: 1,
+            backgroundColor: 'rgba(255,255,255,0.12)',
+          }}
+        />
+        {/* Centre circle */}
+        <View
+          style={{
+            position: 'absolute',
+            left: '50%',
+            top: '50%',
+            width: 60,
+            height: 60,
+            marginLeft: -30,
+            marginTop: -30,
+            borderRadius: 30,
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.12)',
+          }}
+        />
+
+        <View style={{ flexDirection: 'row' }}>
+          {/* Home side — rows rendered left→right (GK on left) */}
+          <View style={{ flex: 1, gap: 10, paddingVertical: 8, paddingLeft: 8 }}>
+            {homeRows.map((count, ri) => {
+              const rowPlayers: Player[] = [];
+              for (let i = 0; i < count && homeIdx < homePlayers.length; i++, homeIdx++) {
+                rowPlayers.push(homePlayers[homeIdx]);
+              }
+              return (
+                <View key={ri} style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
+                  {rowPlayers.map((p, pi) => (
+                    <View key={pi} style={{ alignItems: 'center', gap: 3, flex: 1 }}>
+                      <View
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: 14,
+                          backgroundColor: homeColor6,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderWidth: 1.5,
+                          borderColor: 'rgba(255,255,255,0.3)',
+                        }}
+                      >
+                        <ThemedText style={{ fontSize: 9, fontWeight: '800', color: '#fff' }}>
+                          {p.number || '?'}
+                        </ThemedText>
+                      </View>
+                      <ThemedText
+                        numberOfLines={1}
+                        style={{
+                          fontSize: 8,
+                          color: 'rgba(255,255,255,0.8)',
+                          fontWeight: '600',
+                          textAlign: 'center',
+                          maxWidth: 40,
+                        }}
+                      >
+                        {p.name.split(' ').pop()}
+                      </ThemedText>
+                    </View>
+                  ))}
+                </View>
+              );
+            })}
+          </View>
+
+          {/* Away side — rows rendered right→left (GK on right) */}
+          <View style={{ flex: 1, gap: 10, paddingVertical: 8, paddingRight: 8 }}>
+            {[...awayRows].reverse().map((count, ri) => {
+              const rowPlayers: Player[] = [];
+              for (let i = 0; i < count && awayIdx < awayPlayers.length; i++, awayIdx++) {
+                rowPlayers.push(awayPlayers[awayIdx]);
+              }
+              return (
+                <View key={ri} style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
+                  {rowPlayers.map((p, pi) => (
+                    <View key={pi} style={{ alignItems: 'center', gap: 3, flex: 1 }}>
+                      <View
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: 14,
+                          backgroundColor: awayColor6,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderWidth: 1.5,
+                          borderColor: 'rgba(255,255,255,0.3)',
+                        }}
+                      >
+                        <ThemedText style={{ fontSize: 9, fontWeight: '800', color: '#fff' }}>
+                          {p.number || '?'}
+                        </ThemedText>
+                      </View>
+                      <ThemedText
+                        numberOfLines={1}
+                        style={{
+                          fontSize: 8,
+                          color: 'rgba(255,255,255,0.8)',
+                          fontWeight: '600',
+                          textAlign: 'center',
+                          maxWidth: 40,
+                        }}
+                      >
+                        {p.name.split(' ').pop()}
+                      </ThemedText>
+                    </View>
+                  ))}
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      </View>
+
+      {/* Player list below pitch */}
+      <View style={[styles.statsCard, { marginTop: 12 }]}>
+        <View style={styles.statHeader}>
+          <ThemedText style={[styles.statHeaderTeam, { flex: 1 }]}>{homeAbbrev}</ThemedText>
+          <ThemedText style={styles.statHeaderCenter}>#</ThemedText>
+          <ThemedText style={[styles.statHeaderTeam, { flex: 1, textAlign: 'right' }]}>{awayAbbrev}</ThemedText>
+        </View>
+        {Array.from({ length: Math.max(homePlayers.length, awayPlayers.length) }).map((_, i) => {
+          const hp = homePlayers[i];
+          const ap = awayPlayers[i];
+          return (
+            <View key={i} style={[styles.lineupRow, i > 0 && { borderTopWidth: 1, borderTopColor: BORDER }]}>
+              <View style={styles.lineupPlayerSide}>
+                {hp && (
+                  <>
+                    <ThemedText style={styles.lineupNumber}>{hp.number}</ThemedText>
+                    <ThemedText style={styles.lineupName} numberOfLines={1}>
+                      {hp.name}
+                    </ThemedText>
+                    <ThemedText style={styles.lineupPos}>{hp.position}</ThemedText>
+                  </>
+                )}
+              </View>
+              <View style={styles.lineupDivider} />
+              <View style={[styles.lineupPlayerSide, { alignItems: 'flex-end' }]}>
+                {ap && (
+                  <>
+                    <ThemedText style={styles.lineupPos}>{ap.position}</ThemedText>
+                    <ThemedText style={styles.lineupName} numberOfLines={1}>
+                      {ap.name}
+                    </ThemedText>
+                    <ThemedText style={styles.lineupNumber}>{ap.number}</ThemedText>
+                  </>
+                )}
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 type Tab = 'summary' | 'stats' | 'events' | 'lineups' | 'h2h';
 const TABS: { key: Tab; label: string }[] = [
   { key: 'summary', label: 'Summary' },
@@ -266,7 +530,6 @@ export default function MatchScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [match, setMatch] = useState<MatchDetail | null>(null);
-  const [h2h, setH2H] = useState<H2HMatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>('summary');
 
@@ -275,10 +538,6 @@ export default function MatchScreen() {
       if (initial) setLoading(true);
       const detail = await fetchMatchDetail(leagueId || 'eng.1', eventId);
       setMatch(detail);
-      if (initial && detail) {
-        const h2hData = await fetchH2H(detail.home.id, detail.away.id, leagueId || 'eng.1');
-        setH2H(h2hData);
-      }
       if (initial) setLoading(false);
     },
     [eventId, leagueId],
@@ -326,9 +585,11 @@ export default function MatchScreen() {
       homeTeam: match.home.name,
       homeAbbrev: match.home.abbrev,
       homeScore: match.home.score,
+      homeLogo: match.home.logo ?? null,
       awayTeam: match.away.name,
       awayAbbrev: match.away.abbrev,
       awayScore: match.away.score,
+      awayLogo: match.away.logo ?? null,
       clock: match.clock,
       statusDetail: match.statusDetail,
       leagueName,
@@ -382,9 +643,11 @@ export default function MatchScreen() {
         homeTeam: match.home.name,
         homeAbbrev: match.home.abbrev,
         homeScore: match.home.score,
+        homeLogo: match.home.logo ?? null,
         awayTeam: match.away.name,
         awayAbbrev: match.away.abbrev,
         awayScore: match.away.score,
+        awayLogo: match.away.logo ?? null,
         clock: match.clock,
         statusDetail: match.statusDetail,
         leagueName,
@@ -440,7 +703,11 @@ export default function MatchScreen() {
           headerLeft,
         }}
       />
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 80 }} showsVerticalScrollIndicator={false} contentInsetAdjustmentBehavior="automatic">
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
+        showsVerticalScrollIndicator={false}
+        contentInsetAdjustmentBehavior="automatic"
+      >
         {/* Score Hero */}
         <View style={styles.hero}>
           <View style={styles.heroBadge}>
@@ -448,7 +715,7 @@ export default function MatchScreen() {
               <View style={styles.liveBadge}>
                 <RNAnimated.View style={[styles.liveDot, { opacity: pulseAnim }]} />
                 <ThemedText style={styles.liveBadgeText}>
-                  {match.clock}' — {match.statusDetail}
+                  {match.statusDetail}
                 </ThemedText>
               </View>
             ) : (
@@ -462,13 +729,8 @@ export default function MatchScreen() {
               <Animated.View
                 sharedTransitionTag={`match-home-logo-${eventId}`}
                 sharedTransitionStyle={springTransition}
-                style={styles.heroLogoRing}
               >
-                {match.home.logo ? (
-                  <Image source={{ uri: match.home.logo }} style={styles.heroLogo} contentFit="contain" />
-                ) : (
-                  <ThemedText style={styles.logoChar}>{match.home.abbrev[0]}</ThemedText>
-                )}
+                <TeamLogo logo={match.home.logo} abbrev={match.home.abbrev} color={match.home.color} size={72} />
               </Animated.View>
               <ThemedText style={styles.heroTeamName} numberOfLines={2}>
                 {match.home.name}
@@ -481,7 +743,7 @@ export default function MatchScreen() {
                 <ThemedText style={styles.vsText}>vs</ThemedText>
               ) : (
                 <ThemedText style={styles.scoreText}>
-                  {match.home.score} — {match.away.score}
+                   {match.home.score} - {match.away.score}
                 </ThemedText>
               )}
               {isLive && (
@@ -489,6 +751,7 @@ export default function MatchScreen() {
                   {match.period === 1 ? '1st Half' : match.period === 2 ? '2nd Half' : `Period ${match.period}`}
                 </ThemedText>
               )}
+              {isPost && <ThemedText style={styles.periodText}>Full Time</ThemedText>}
             </View>
 
             {/* Away */}
@@ -496,13 +759,8 @@ export default function MatchScreen() {
               <Animated.View
                 sharedTransitionTag={`match-away-logo-${eventId}`}
                 sharedTransitionStyle={springTransition}
-                style={styles.heroLogoRing}
               >
-                {match.away.logo ? (
-                  <Image source={{ uri: match.away.logo }} style={styles.heroLogo} contentFit="contain" />
-                ) : (
-                  <ThemedText style={styles.logoChar}>{match.away.abbrev[0]}</ThemedText>
-                )}
+                <TeamLogo logo={match.away.logo} abbrev={match.away.abbrev} color={match.away.color} size={72} />
               </Animated.View>
               <ThemedText style={styles.heroTeamName} numberOfLines={2}>
                 {match.away.name}
@@ -555,7 +813,12 @@ export default function MatchScreen() {
         </View>
 
         {/* Tab bar */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabBarScroll} contentInsetAdjustmentBehavior="automatic">
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.tabBarScroll}
+          contentInsetAdjustmentBehavior="automatic"
+        >
           <View style={styles.tabBar}>
             {TABS.map((tab) => (
               <TouchableOpacity
@@ -574,43 +837,124 @@ export default function MatchScreen() {
         {/* Tab content */}
         {activeTab === 'summary' && (
           <View style={styles.tabContent}>
-            {match.headlines ? (
-              <View style={styles.card}>
-                <ThemedText style={styles.cardTitle}>Match Preview</ThemedText>
-                <ThemedText style={styles.cardBody}>{match.headlines}</ThemedText>
-              </View>
-            ) : (
-              <View style={styles.card}>
-                <ThemedText style={styles.cardBody}>
-                  {match.statusState === 'pre'
-                    ? `${match.home.name} host ${match.away.name} at ${match.venue || 'their home ground'}.`
+            {/* Result / status card */}
+            <View style={styles.card}>
+              <ThemedText style={styles.cardTitle}>
+                {match.statusState === 'pre' ? 'Preview' : match.statusState === 'in' ? 'In Progress' : 'Full Time'}
+              </ThemedText>
+              <ThemedText style={styles.cardBody}>
+                {match.headlines
+                  ? match.headlines
+                  : match.statusState === 'pre'
+                    ? `${match.home.name} host ${match.away.name}${match.venue ? ` at ${match.venue}` : ''}.`
                     : match.statusState === 'in'
-                      ? `This match is currently in progress.`
-                      : `Full-time: ${match.home.name} ${match.home.score}–${match.away.score} ${match.away.name}`}
-                </ThemedText>
+                      ? `${match.home.name} ${match.home.score}–${match.away.score} ${match.away.name} — ${match.statusDetail}`
+                      : `${match.home.name} ${match.home.score}–${match.away.score} ${match.away.name}. Full time.`}
+              </ThemedText>
+            </View>
+
+            {/* Match info card */}
+            {(match.venue || match.broadcast) && (
+              <View style={styles.card}>
+                <ThemedText style={styles.cardTitle}>Match Info</ThemedText>
+                {match.venue && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <Icon sf="mappin" material="location-on" size={14} color={TEXT_MUTED} />
+                    <ThemedText style={styles.cardBody}>
+                      {match.venue}
+                      {match.city ? `, ${match.city}` : ''}
+                    </ThemedText>
+                  </View>
+                )}
+                {match.broadcast && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Icon sf="tv" material="tv" size={14} color={TEXT_MUTED} />
+                    <ThemedText style={styles.cardBody}>{match.broadcast}</ThemedText>
+                  </View>
+                )}
               </View>
             )}
 
-            {/* Quick stat highlights in summary */}
-            {match.home.stats && match.home.stats.length > 0 && (
-              <View style={styles.card}>
-                <ThemedText style={styles.cardTitle}>Key Stats</ThemedText>
-                <View style={styles.quickStats}>
-                  {match.home.stats
-                    .filter((s) =>
-                      ['Ball Possession', 'Shots on Target', 'Shots'].some((k) =>
-                        s.name?.toLowerCase().includes(k.toLowerCase()),
-                      ),
-                    )
-                    .slice(0, 3)
-                    .map((stat, i) => (
-                      <View key={i} style={styles.quickStatItem}>
-                        <ThemedText style={styles.quickStatValue}>{stat.homeValue}</ThemedText>
-                        <ThemedText style={styles.quickStatName}>{stat.name}</ThemedText>
-                        <ThemedText style={styles.quickStatValue}>{stat.awayValue}</ThemedText>
-                      </View>
-                    ))}
+            {/* Key goals / cards inline */}
+            {match.keyEvents.filter((e) => e.type === 'goal' || e.type === 'red' || e.type === 'yellow').length > 0 && (
+              <View style={styles.statsCard}>
+                <View style={[styles.statHeader, { paddingHorizontal: 16 }]}>
+                  <ThemedText style={[styles.statHeaderTeam, { flex: 1 }]}>{match.home.abbrev}</ThemedText>
+                  <ThemedText style={styles.statHeaderCenter}>Key Events</ThemedText>
+                  <ThemedText style={[styles.statHeaderTeam, { flex: 1, textAlign: 'right' }]}>
+                    {match.away.abbrev}
+                  </ThemedText>
                 </View>
+                {match.keyEvents
+                  .filter((e) => e.type === 'goal' || e.type === 'red' || e.type === 'yellow')
+                  .map((evt, i) => {
+                    const icon = EVENT_ICONS[evt.type];
+                    const isHome = evt.team === 'home';
+                    return (
+                      <View
+                        key={evt.id}
+                        style={[styles.eventRow, i > 0 && { borderTopWidth: 1, borderTopColor: BORDER }]}
+                      >
+                        <View style={styles.eventSide}>
+                          {isHome && (
+                            <ThemedText style={styles.eventText} numberOfLines={1}>
+                              {evt.text}
+                            </ThemedText>
+                          )}
+                        </View>
+                        <View style={styles.eventMid}>
+                          <Icon sf={icon.sf} material={icon.material} size={13} color={icon.color} />
+                          <ThemedText style={styles.eventClock}>{evt.clock}'</ThemedText>
+                        </View>
+                        <View style={[styles.eventSide, { alignItems: 'flex-end' }]}>
+                          {!isHome && (
+                            <ThemedText style={[styles.eventText, { textAlign: 'right' }]} numberOfLines={1}>
+                              {evt.text}
+                            </ThemedText>
+                          )}
+                        </View>
+                      </View>
+                    );
+                  })}
+              </View>
+            )}
+
+            {/* Quick stats */}
+            {match.home.stats && match.home.stats.length > 0 && (
+              <View style={styles.statsCard}>
+                <View style={[styles.statHeader, { paddingHorizontal: 16 }]}>
+                  <ThemedText style={[styles.statHeaderTeam, { flex: 1 }]}>{match.home.abbrev}</ThemedText>
+                  <ThemedText style={styles.statHeaderCenter}>Stats</ThemedText>
+                  <ThemedText style={[styles.statHeaderTeam, { flex: 1, textAlign: 'right' }]}>
+                    {match.away.abbrev}
+                  </ThemedText>
+                </View>
+                {match.home.stats
+                  .filter((s) =>
+                    ['Ball Possession', 'Shots on Target', 'Shots', 'Corner Kicks', 'Fouls'].some((k) =>
+                      s.name?.toLowerCase().includes(k.toLowerCase()),
+                    ),
+                  )
+                  .slice(0, 5)
+                  .map((stat, i) => {
+                    const homeNum = parseFloat(stat.homeValue) || 0;
+                    const awayNum = parseFloat(stat.awayValue) || 0;
+                    const total = homeNum + awayNum;
+                    const homeBar = total > 0 ? homeNum / total : 0.5;
+                    return (
+                      <View key={i} style={[styles.statRow, i > 0 && { borderTopWidth: 1, borderTopColor: BORDER }]}>
+                        <ThemedText style={styles.statValue}>{stat.homeValue}</ThemedText>
+                        <View style={styles.statBarContainer}>
+                          <ThemedText style={styles.statName}>{stat.name}</ThemedText>
+                          <View style={styles.statBar}>
+                            <View style={[styles.statBarFill, { flex: homeBar }]} />
+                            <View style={[styles.statBarAway, { flex: 1 - homeBar }]} />
+                          </View>
+                        </View>
+                        <ThemedText style={[styles.statValue, { textAlign: 'right' }]}>{stat.awayValue}</ThemedText>
+                      </View>
+                    );
+                  })}
               </View>
             )}
           </View>
@@ -623,17 +967,13 @@ export default function MatchScreen() {
                 {/* Header */}
                 <View style={styles.statHeader}>
                   <View style={styles.statTeamHeaderSide}>
-                    {match.home.logo && (
-                      <Image source={{ uri: match.home.logo }} style={styles.statHeaderLogo} contentFit="contain" />
-                    )}
+                    <TeamLogo logo={match.home.logo} abbrev={match.home.abbrev} color={match.home.color} size={24} />
                     <ThemedText style={styles.statHeaderTeam}>{match.home.abbrev}</ThemedText>
                   </View>
                   <ThemedText style={styles.statHeaderCenter}>Stats</ThemedText>
                   <View style={[styles.statTeamHeaderSide, { justifyContent: 'flex-end' }]}>
                     <ThemedText style={styles.statHeaderTeam}>{match.away.abbrev}</ThemedText>
-                    {match.away.logo && (
-                      <Image source={{ uri: match.away.logo }} style={styles.statHeaderLogo} contentFit="contain" />
-                    )}
+                    <TeamLogo logo={match.away.logo} abbrev={match.away.abbrev} color={match.away.color} size={24} />
                   </View>
                 </View>
                 {match.home.stats
@@ -731,107 +1071,125 @@ export default function MatchScreen() {
                 </ThemedText>
               </View>
             ) : (
-              <>
-                <View style={styles.lineupsHeader}>
-                  <View style={styles.lineupsTeamHeader}>
-                    {match.home.logo && (
-                      <Image source={{ uri: match.home.logo }} style={styles.lineupHeaderLogo} contentFit="contain" />
-                    )}
-                    <ThemedText style={styles.lineupsTeamName}>{match.home.abbrev}</ThemedText>
-                    {match.lineups.homeFormation && (
-                      <ThemedText style={styles.formationBadge}>{match.lineups.homeFormation}</ThemedText>
-                    )}
-                  </View>
-                  <View style={styles.lineupsTeamHeader}>
-                    {match.lineups.awayFormation && (
-                      <ThemedText style={styles.formationBadge}>{match.lineups.awayFormation}</ThemedText>
-                    )}
-                    <ThemedText style={styles.lineupsTeamName}>{match.away.abbrev}</ThemedText>
-                    {match.away.logo && (
-                      <Image source={{ uri: match.away.logo }} style={styles.lineupHeaderLogo} contentFit="contain" />
-                    )}
-                  </View>
-                </View>
-
-                <View style={styles.statsCard}>
-                  {Array.from({
-                    length: Math.max(match.lineups.home.length, match.lineups.away.length),
-                  }).map((_, i) => {
-                    const hp = match.lineups!.home[i];
-                    const ap = match.lineups!.away[i];
-                    return (
-                      <View key={i} style={[styles.lineupRow, i > 0 && { borderTopWidth: 1, borderTopColor: BORDER }]}>
-                        <View style={styles.lineupPlayerSide}>
-                          {hp && (
-                            <>
-                              <ThemedText style={styles.lineupNumber}>{hp.number}</ThemedText>
-                              <ThemedText style={styles.lineupName} numberOfLines={1}>
-                                {hp.name}
-                              </ThemedText>
-                              <ThemedText style={styles.lineupPos}>{hp.position}</ThemedText>
-                            </>
-                          )}
-                        </View>
-                        <View style={styles.lineupDivider} />
-                        <View style={[styles.lineupPlayerSide, { alignItems: 'flex-end' }]}>
-                          {ap && (
-                            <>
-                              <ThemedText style={styles.lineupPos}>{ap.position}</ThemedText>
-                              <ThemedText style={styles.lineupName} numberOfLines={1}>
-                                {ap.name}
-                              </ThemedText>
-                              <ThemedText style={styles.lineupNumber}>{ap.number}</ThemedText>
-                            </>
-                          )}
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-              </>
+              <PitchView
+                homePlayers={match.lineups.home}
+                awayPlayers={match.lineups.away}
+                homeFormation={match.lineups.homeFormation}
+                awayFormation={match.lineups.awayFormation}
+                homeAbbrev={match.home.abbrev}
+                awayAbbrev={match.away.abbrev}
+                homeColor={match.home.color}
+                awayColor={match.away.color}
+              />
             )}
           </View>
         )}
 
         {activeTab === 'h2h' && (
           <View style={styles.tabContent}>
-            {h2h.length === 0 ? (
+            {!match.h2h || match.h2h.length === 0 ? (
               <View style={styles.center}>
-                <Icon sf="person.2" material="people" size={44} color={TEXT_MUTED} />
-                <ThemedText style={styles.emptyText}>No recent head-to-head data</ThemedText>
+                <Icon sf="calendar.badge.exclamationmark" material="event-busy" size={44} color={TEXT_MUTED} />
+                <ThemedText style={styles.emptyText}>No recent head-to-head data found</ThemedText>
               </View>
             ) : (
-              <View style={styles.statsCard}>
-                <View style={styles.h2hHeader}>
-                  <View style={styles.h2hTeamHeader}>
-                    {match.home.logo && (
-                      <Image source={{ uri: match.home.logo }} style={styles.h2hLogo} contentFit="contain" />
-                    )}
-                    <ThemedText style={styles.h2hTeamLabel}>{match.home.abbrev}</ThemedText>
-                  </View>
-                  <ThemedText style={styles.h2hHeaderLabel}>Recent Meetings</ThemedText>
-                  <View style={styles.h2hTeamHeader}>
-                    <ThemedText style={styles.h2hTeamLabel}>{match.away.abbrev}</ThemedText>
-                    {match.away.logo && (
-                      <Image source={{ uri: match.away.logo }} style={styles.h2hLogo} contentFit="contain" />
-                    )}
-                  </View>
-                </View>
-                {h2h.map((m, i) => {
-                  const homeWon = Number(m.home.score) > Number(m.away.score);
-                  const awayWon = Number(m.away.score) > Number(m.home.score);
+              <>
+                {/* Summary row: W / D / L counts */}
+                {(() => {
+                  let hw = 0,
+                    d = 0,
+                    aw = 0;
+                  match.h2h.forEach((m) => {
+                    const hs = Number(m.home.score),
+                      as2 = Number(m.away.score);
+                    if (hs > as2) hw++;
+                    else if (hs < as2) aw++;
+                    else d++;
+                  });
                   return (
-                    <View key={i} style={[styles.h2hRow, i > 0 && { borderTopWidth: 1, borderTopColor: BORDER }]}>
-                      <ThemedText style={[styles.h2hScore, homeWon && styles.h2hWinner]}>{m.home.score}</ThemedText>
-                      <View style={styles.h2hMid}>
-                        <ThemedText style={styles.h2hDate}>{m.date}</ThemedText>
-                        <ThemedText style={styles.h2hComp}>{m.competition}</ThemedText>
+                    <View style={[styles.statsCard, { marginBottom: 12 }]}>
+                      <View style={{ flexDirection: 'row' }}>
+                        <View
+                          style={{
+                            flex: 1,
+                            alignItems: 'center',
+                            padding: 14,
+                            borderRightWidth: 1,
+                            borderRightColor: BORDER,
+                          }}
+                        >
+                          <ThemedText style={{ fontSize: 22, fontWeight: '800', color: '#4ADE80' }}>{hw}</ThemedText>
+                          <ThemedText style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 2 }}>
+                            {match.home.abbrev} Wins
+                          </ThemedText>
+                        </View>
+                        <View
+                          style={{
+                            flex: 1,
+                            alignItems: 'center',
+                            padding: 14,
+                            borderRightWidth: 1,
+                            borderRightColor: BORDER,
+                          }}
+                        >
+                          <ThemedText style={{ fontSize: 22, fontWeight: '800', color: TEXT_MUTED }}>{d}</ThemedText>
+                          <ThemedText style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 2 }}>Draws</ThemedText>
+                        </View>
+                        <View style={{ flex: 1, alignItems: 'center', padding: 14 }}>
+                          <ThemedText style={{ fontSize: 22, fontWeight: '800', color: LIVE_COLOR }}>{aw}</ThemedText>
+                          <ThemedText style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 2 }}>
+                            {match.away.abbrev} Wins
+                          </ThemedText>
+                        </View>
                       </View>
-                      <ThemedText style={[styles.h2hScore, awayWon && styles.h2hWinner]}>{m.away.score}</ThemedText>
                     </View>
                   );
-                })}
-              </View>
+                })()}
+
+                <View style={styles.statsCard}>
+                  <View style={[styles.statHeader, { paddingHorizontal: 16 }]}>
+                    <ThemedText style={[styles.statHeaderTeam, { flex: 1 }]}>{match.home.abbrev}</ThemedText>
+                    <ThemedText style={styles.statHeaderCenter}>Recent Meetings</ThemedText>
+                    <ThemedText style={[styles.statHeaderTeam, { flex: 1, textAlign: 'right' }]}>
+                      {match.away.abbrev}
+                    </ThemedText>
+                  </View>
+                  {match.h2h.map((m, i) => {
+                    const homeScore = Number(m.home.score);
+                    const awayScore = Number(m.away.score);
+                    const homeWon = homeScore > awayScore;
+                    const awayWon = awayScore > homeScore;
+                    const resultColor = homeWon ? '#4ADE80' : awayWon ? LIVE_COLOR : TEXT_SECONDARY;
+                    const resultLabel = homeWon ? 'W' : awayWon ? 'L' : 'D';
+                    return (
+                      <View key={i} style={[styles.h2hRow, i > 0 && { borderTopWidth: 1, borderTopColor: BORDER }]}>
+                        <View
+                          style={{
+                            width: 24,
+                            height: 24,
+                            borderRadius: 6,
+                            backgroundColor: resultColor + '22',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <ThemedText style={{ fontSize: 11, fontWeight: '800', color: resultColor }}>
+                            {resultLabel}
+                          </ThemedText>
+                        </View>
+                        <ThemedText style={[styles.h2hScore, homeWon && styles.h2hWinner]}>{m.home.score}</ThemedText>
+                        <View style={styles.h2hMid}>
+                          <ThemedText style={styles.h2hDate}>{m.date}</ThemedText>
+                          <ThemedText style={styles.h2hComp} numberOfLines={1}>
+                            {m.competition}
+                          </ThemedText>
+                        </View>
+                        <ThemedText style={[styles.h2hScore, awayWon && styles.h2hWinner]}>{m.away.score}</ThemedText>
+                      </View>
+                    );
+                  })}
+                </View>
+              </>
             )}
           </View>
         )}
@@ -884,7 +1242,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   heroScore: { alignItems: 'center', paddingHorizontal: 8 },
-  scoreText: { fontSize: 36, fontWeight: '800', color: TEXT, letterSpacing: 2 },
+  scoreText: { fontSize: 35, fontWeight: '800', color: TEXT, letterSpacing: 1, paddingTop: 10, },
   vsText: { fontSize: 22, fontWeight: '700', color: TEXT_MUTED },
   periodText: { fontSize: 12, color: LIVE_COLOR, fontWeight: '600', marginTop: 4 },
   heroMeta: { alignItems: 'center', marginTop: 16, gap: 4 },
