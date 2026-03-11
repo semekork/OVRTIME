@@ -11,21 +11,25 @@ import {
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { SharedTransition } from 'react-native-reanimated';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Icon } from '@/components/icon';
 import { getLeagueById } from '@/utils/leagues';
 import { toggleFavorite, isFavorite, type FavoriteMatch } from '@/utils/favorites';
 import { useInterval } from '@/hooks/use-interval';
+import { C } from '@/constants/theme';
 
-const ACCENT = '#FF6B00';
-const BG = '#000000';
-const SURFACE = '#111111';
-const BORDER = '#1E1E1E';
-const TEXT = '#FFFFFF';
-const TEXT_MUTED = '#666666';
-const TEXT_SECONDARY = '#999999';
-const LIVE_COLOR = '#FF3B30';
+const springTransition = SharedTransition.springify().damping(20).stiffness(200);
+
+const ACCENT = C.accent;
+const BG = C.bg;
+const SURFACE = C.surface;
+const BORDER = C.border;
+const TEXT = C.text;
+const TEXT_MUTED = C.textMuted;
+const TEXT_SECONDARY = C.textSecondary;
+const LIVE_COLOR = C.live;
 
 type MatchEvent = {
   id: string;
@@ -262,10 +266,22 @@ export default function LeagueScreen() {
       <Stack.Screen
         options={{
           headerShown: true,
-          headerTitle: league?.name || id,
+          headerTitle: () => (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {league?.logo && (
+                <Animated.View
+                  sharedTransitionTag={`league-logo-${id}`}
+                  sharedTransitionStyle={springTransition}
+                  style={{ width: 24, height: 24 }}
+                >
+                  <Image source={{ uri: league.logo }} style={{ width: 24, height: 24 }} contentFit="contain" />
+                </Animated.View>
+              )}
+              <ThemedText style={{ fontWeight: '700', fontSize: 17, color: TEXT }}>{league?.name || id}</ThemedText>
+            </View>
+          ),
           headerStyle: { backgroundColor: BG },
           headerTintColor: TEXT,
-          headerTitleStyle: { fontWeight: '700', fontSize: 17 },
           headerBackTitle: '',
           headerLeft,
         }}
