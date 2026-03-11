@@ -288,7 +288,12 @@ export default function LeagueScreen() {
       />
 
       {/* Date selector */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateBar} contentInsetAdjustmentBehavior="automatic">
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.dateBar}
+        contentInsetAdjustmentBehavior="automatic"
+      >
         {dates.map((d, i) => (
           <TouchableOpacity
             key={d.queryDate}
