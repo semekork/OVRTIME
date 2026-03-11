@@ -1,15 +1,13 @@
 import React, { useState, useCallback, useRef } from 'react';
-import {
-  StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator,
-} from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, Platform, TextInput } from 'react-native';
 import { useNavigation } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { LEAGUES, FEATURED_LEAGUES } from '@/utils/leagues';
+import { Icon } from '@/components/icon';
+import { LEAGUES, FEATURED_LEAGUES, searchLeagues } from '@/utils/leagues';
 
 const ACCENT = '#FF6B00';
 const BG = '#000000';
@@ -31,17 +29,17 @@ type SearchResult = {
 
 async function searchESPN(query: string): Promise<SearchResult[]> {
   if (!query.trim()) return [];
-  // First check our local leagues registry for instant results
-  const localLeagues = LEAGUES.filter(
-    (l) =>
-      l.name.toLowerCase().includes(query.toLowerCase()) ||
-      l.country.toLowerCase().includes(query.toLowerCase()) ||
-      l.shortName.toLowerCase().includes(query.toLowerCase())
-  ).map((l): SearchResult => ({
-    id: l.id, type: 'league', name: l.name, description: l.country, logo: l.logo || undefined, leagueSlug: l.id,
-  }));
+  const localLeagues = searchLeagues(query).map(
+    (l): SearchResult => ({
+      id: l.id,
+      type: 'league',
+      name: l.name,
+      description: l.country,
+      logo: l.logo || undefined,
+      leagueSlug: l.id,
+    }),
+  );
 
-  // Then try ESPN search API for teams
   try {
     const url = `https://site.api.espn.com/apis/search/v2?query=${encodeURIComponent(query)}&limit=12&sport=soccer`;
     const res = await fetch(url);
@@ -61,13 +59,34 @@ async function searchESPN(query: string): Promise<SearchResult[]> {
         });
       }
     }
-    // Merge: local leagues first (dedup by name), then ESPN teams
     const allNames = new Set(localLeagues.map((r) => r.name.toLowerCase()));
     const deduped = espnResults.filter((r) => !allNames.has(r.name.toLowerCase()));
     return [...localLeagues, ...deduped].slice(0, 20);
   } catch {
     return localLeagues;
   }
+}
+
+function runSearch(
+  text: string,
+  debounceRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
+  setLoading: (v: boolean) => void,
+  setResults: (v: SearchResult[]) => void,
+  setSearched: (v: boolean) => void,
+) {
+  if (debounceRef.current) clearTimeout(debounceRef.current);
+  if (!text.trim()) {
+    setResults([]);
+    setSearched(false);
+    return;
+  }
+  debounceRef.current = setTimeout(async () => {
+    setLoading(true);
+    const r = await searchESPN(text);
+    setResults(r);
+    setSearched(true);
+    setLoading(false);
+  }, 350);
 }
 
 export default function SearchScreen() {
@@ -80,8 +99,9 @@ export default function SearchScreen() {
   const [searched, setSearched] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Wire up native search bar from the Stack header
+  // iOS: wire up native search bar from the Stack header
   React.useLayoutEffect(() => {
+    if (Platform.OS !== 'ios') return;
     navigation.setOptions({
       headerSearchBarOptions: {
         placeholder: 'Search by team, league, or competition...',
@@ -89,17 +109,13 @@ export default function SearchScreen() {
         onChangeText: (e: { nativeEvent: { text: string } }) => {
           const text = e.nativeEvent.text;
           setQuery(text);
-          if (debounceRef.current) clearTimeout(debounceRef.current);
-          if (!text.trim()) { setResults([]); setSearched(false); return; }
-          debounceRef.current = setTimeout(async () => {
-            setLoading(true);
-            const r = await searchESPN(text);
-            setResults(r);
-            setSearched(true);
-            setLoading(false);
-          }, 350);
+          runSearch(text, debounceRef, setLoading, setResults, setSearched);
         },
-        onCancelButtonPress: () => { setQuery(''); setResults([]); setSearched(false); },
+        onCancelButtonPress: () => {
+          setQuery('');
+          setResults([]);
+          setSearched(false);
+        },
       },
     });
   }, [navigation]);
@@ -112,17 +128,54 @@ export default function SearchScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      {/* Android: manual TextInput search bar */}
+      {Platform.OS !== 'ios' && (
+        <View style={[styles.androidSearchBar, { paddingTop: insets.top + 8 }]}>
+          <View style={styles.androidSearchInputRow}>
+            <Icon sf="magnifyingglass" material="search" size={18} color={TEXT_MUTED} />
+            <TextInput
+              style={styles.androidSearchInput}
+              placeholder="Search leagues or teams..."
+              placeholderTextColor={TEXT_MUTED}
+              value={query}
+              onChangeText={(text) => {
+                setQuery(text);
+                runSearch(text, debounceRef, setLoading, setResults, setSearched);
+              }}
+              returnKeyType="search"
+              autoCorrect={false}
+              autoCapitalize="none"
+              clearButtonMode="while-editing"
+            />
+            {query.length > 0 && (
+              <TouchableOpacity
+                onPress={() => {
+                  setQuery('');
+                  setResults([]);
+                  setSearched(false);
+                }}
+              >
+                <Icon sf="xmark.circle.fill" material="cancel" size={18} color={TEXT_MUTED} />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      )}
+
       <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         {loading ? (
-          <View style={styles.center}><ActivityIndicator color={ACCENT} size="large" /></View>
+          <View style={styles.center}>
+            <ActivityIndicator color={ACCENT} size="large" />
+          </View>
         ) : showingResults ? (
           results.length === 0 && searched ? (
             <View style={styles.emptyState}>
-              <SymbolView name="magnifyingglass" tintColor={TEXT_MUTED} size={44} />
+              <Icon sf="magnifyingglass" material="search-off" size={44} color={TEXT_MUTED} />
               <ThemedText style={styles.emptyTitle}>No results</ThemedText>
               <ThemedText style={styles.emptySubtitle}>Try a different team or league name</ThemedText>
             </View>
@@ -133,13 +186,24 @@ export default function SearchScreen() {
                   key={`${item.id}-${idx}`}
                   style={[styles.resultRow, idx < results.length - 1 && styles.resultRowBorder]}
                   activeOpacity={0.7}
-                  onPress={() => item.leagueSlug ? goToLeague(item.leagueSlug) : item.type === 'league' ? goToLeague(item.id) : undefined}
+                  onPress={() =>
+                    item.leagueSlug
+                      ? goToLeague(item.leagueSlug)
+                      : item.type === 'league'
+                        ? goToLeague(item.id)
+                        : undefined
+                  }
                 >
                   <View style={styles.resultIcon}>
                     {item.logo ? (
                       <Image source={{ uri: item.logo }} style={styles.resultLogo} contentFit="contain" />
                     ) : (
-                      <SymbolView name={item.type === 'league' ? 'trophy' : 'soccerball'} tintColor={TEXT_MUTED} size={20} />
+                      <Icon
+                        sf={item.type === 'league' ? 'trophy' : 'soccerball'}
+                        material={item.type === 'league' ? 'emoji-events' : 'sports-soccer'}
+                        size={20}
+                        color={TEXT_MUTED}
+                      />
                     )}
                   </View>
                   <View style={styles.resultInfo}>
@@ -147,9 +211,7 @@ export default function SearchScreen() {
                     {item.description ? <ThemedText style={styles.resultDesc}>{item.description}</ThemedText> : null}
                   </View>
                   <View style={styles.resultTypeBadge}>
-                    <ThemedText style={styles.resultTypeText}>
-                      {item.type === 'league' ? 'League' : 'Team'}
-                    </ThemedText>
+                    <ThemedText style={styles.resultTypeText}>{item.type === 'league' ? 'League' : 'Team'}</ThemedText>
                   </View>
                 </TouchableOpacity>
               ))}
@@ -157,9 +219,10 @@ export default function SearchScreen() {
           )
         ) : (
           <>
-            {/* Continents / featured */}
             {['Europe', 'America', 'Asia', 'Africa', 'International'].map((continent) => {
-              const cl = FEATURED_LEAGUES.filter((l) => l.continent === continent || (continent === 'International' && l.continent === 'International'));
+              const cl = FEATURED_LEAGUES.filter(
+                (l) => l.continent === continent || (continent === 'International' && l.continent === 'International'),
+              );
               if (cl.length === 0) return null;
               return (
                 <View key={continent} style={styles.section}>
@@ -176,14 +239,14 @@ export default function SearchScreen() {
                           {league.logo ? (
                             <Image source={{ uri: league.logo }} style={styles.resultLogo} contentFit="contain" />
                           ) : (
-                            <SymbolView name="trophy" tintColor={TEXT_MUTED} size={18} />
+                            <Icon sf="trophy" material="emoji-events" size={18} color={TEXT_MUTED} />
                           )}
                         </View>
                         <View style={styles.resultInfo}>
                           <ThemedText style={styles.resultName}>{league.name}</ThemedText>
                           <ThemedText style={styles.resultDesc}>{league.country}</ThemedText>
                         </View>
-                        <SymbolView name="chevron.right" tintColor={TEXT_MUTED} size={14} />
+                        <Icon sf="chevron.right" material="chevron-right" size={14} color={TEXT_MUTED} />
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -199,25 +262,84 @@ export default function SearchScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: BG },
+  // Android search bar
+  androidSearchBar: {
+    backgroundColor: BG,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  androidSearchInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: SURFACE,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: BORDER,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 10,
+  },
+  androidSearchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: TEXT,
+    padding: 0,
+  },
+  // Scroll content
   scrollContent: { paddingBottom: 40, paddingTop: 8 },
   center: { alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
-  emptyState: { alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 12, paddingHorizontal: 40 },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 80,
+    gap: 12,
+    paddingHorizontal: 40,
+  },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: TEXT },
   emptySubtitle: { fontSize: 14, color: TEXT_MUTED, textAlign: 'center', lineHeight: 21 },
   section: { marginBottom: 20 },
   sectionTitle: {
-    fontSize: 12, fontWeight: '600', color: TEXT_SECONDARY,
-    textTransform: 'uppercase', letterSpacing: 0.5,
-    paddingHorizontal: 16, paddingVertical: 8, paddingTop: 12,
+    fontSize: 12,
+    fontWeight: '600',
+    color: TEXT_SECONDARY,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    paddingTop: 12,
   },
-  resultsList: { marginHorizontal: 16, backgroundColor: SURFACE, borderRadius: 10, borderWidth: 1, borderColor: BORDER, overflow: 'hidden' },
+  resultsList: {
+    marginHorizontal: 16,
+    backgroundColor: SURFACE,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: BORDER,
+    overflow: 'hidden',
+  },
   resultRow: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
   resultRowBorder: { borderBottomWidth: 1, borderBottomColor: BORDER },
-  resultIcon: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1A1A1A', borderRadius: 8, overflow: 'hidden' },
+  resultIcon: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1A1A1A',
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
   resultLogo: { width: 28, height: 28 },
   resultInfo: { flex: 1 },
   resultName: { fontSize: 15, fontWeight: '600', color: TEXT },
   resultDesc: { fontSize: 12, color: TEXT_MUTED, marginTop: 2 },
-  resultTypeBadge: { backgroundColor: '#1A1A1A', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: BORDER },
+  resultTypeBadge: {
+    backgroundColor: '#1A1A1A',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
   resultTypeText: { fontSize: 11, color: TEXT_MUTED, fontWeight: '500' },
 });
