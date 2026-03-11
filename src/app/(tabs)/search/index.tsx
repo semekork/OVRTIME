@@ -8,14 +8,15 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Icon } from '@/components/icon';
 import { LEAGUES, FEATURED_LEAGUES, searchLeagues } from '@/utils/leagues';
+import { C } from '@/constants/theme';
 
-const ACCENT = '#FF6B00';
-const BG = '#000000';
-const SURFACE = '#111111';
-const BORDER = '#1E1E1E';
-const TEXT = '#FFFFFF';
-const TEXT_MUTED = '#666666';
-const TEXT_SECONDARY = '#999999';
+const ACCENT = C.accent;
+const BG = C.bg;
+const SURFACE = C.surface;
+const BORDER = C.border;
+const TEXT = C.text;
+const TEXT_MUTED = C.textMuted;
+const TEXT_SECONDARY = C.textSecondary;
 
 type SearchResult = {
   id: string;
