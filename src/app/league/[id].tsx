@@ -6,13 +6,14 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { Icon } from '@/components/icon';
 import { getLeagueById } from '@/utils/leagues';
 import { toggleFavorite, isFavorite, type FavoriteMatch } from '@/utils/favorites';
 import { useInterval } from '@/hooks/use-interval';
@@ -50,7 +51,14 @@ const generateDates = () => {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
     dates.push({
-      label: i === 0 ? 'Today' : i === -1 ? 'Yesterday' : i === 1 ? 'Tomorrow' : d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+      label:
+        i === 0
+          ? 'Today'
+          : i === -1
+            ? 'Yesterday'
+            : i === 1
+              ? 'Tomorrow'
+              : d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
       day: d.toLocaleDateString('en-US', { weekday: 'short' }),
       date: d.getDate().toString(),
       isToday: i === 0,
@@ -65,6 +73,17 @@ export default function LeagueScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const league = getLeagueById(id);
+
+  const AndroidBack = () => (
+    <TouchableOpacity
+      onPress={() => router.back()}
+      style={{ paddingHorizontal: 12, paddingVertical: 8 }}
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+    >
+      <Icon sf="chevron.left" material="arrow-back" size={22} color={TEXT} />
+    </TouchableOpacity>
+  );
+  const headerLeft = Platform.OS === 'android' ? () => <AndroidBack /> : undefined;
   const [dates] = useState(generateDates);
   const [selectedIdx, setSelectedIdx] = useState(3); // today
   const [events, setEvents] = useState<MatchEvent[]>([]);
@@ -74,51 +93,65 @@ export default function LeagueScreen() {
 
   const selectedDate = dates[selectedIdx];
 
-  const fetchEvents = useCallback(async (showLoader = false) => {
-    if (showLoader) setLoading(true);
-    try {
-      const res = await fetch(
-        `https://site.api.espn.com/apis/site/v2/sports/soccer/${id}/scoreboard?dates=${selectedDate.queryDate}`
-      );
-      const data = await res.json();
-      const raw: MatchEvent[] = (data.events || []).map((evt: any) => {
-        const homeComp = evt.competitions[0].competitors.find((c: any) => c.homeAway === 'home') || evt.competitions[0].competitors[0];
-        const awayComp = evt.competitions[0].competitors.find((c: any) => c.homeAway === 'away') || evt.competitions[0].competitors[1];
-        return {
-          id: evt.id,
-          date: new Date(evt.date),
-          statusState: evt.status.type.state,
-          statusShortDetail: evt.status.type.shortDetail,
-          clock: evt.status.displayClock,
-          home: {
-            team: homeComp?.team?.displayName || homeComp?.team?.name || 'TBD',
-            abbrev: homeComp?.team?.abbreviation || 'TBD',
-            score: homeComp?.score ?? '0',
-            logo: homeComp?.team?.logo || null,
-            color: homeComp?.team?.color || 'FFFFFF',
-          },
-          away: {
-            team: awayComp?.team?.displayName || awayComp?.team?.name || 'TBD',
-            abbrev: awayComp?.team?.abbreviation || 'TBD',
-            score: awayComp?.score ?? '0',
-            logo: awayComp?.team?.logo || null,
-            color: awayComp?.team?.color || 'FFFFFF',
-          },
-        };
-      });
-      setEvents(raw);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  }, [id, selectedDate.queryDate]);
+  const fetchEvents = useCallback(
+    async (showLoader = false) => {
+      if (showLoader) setLoading(true);
+      try {
+        const res = await fetch(
+          `https://site.api.espn.com/apis/site/v2/sports/soccer/${id}/scoreboard?dates=${selectedDate.queryDate}`,
+        );
+        const data = await res.json();
+        const raw: MatchEvent[] = (data.events || []).map((evt: any) => {
+          const homeComp =
+            evt.competitions[0].competitors.find((c: any) => c.homeAway === 'home') ||
+            evt.competitions[0].competitors[0];
+          const awayComp =
+            evt.competitions[0].competitors.find((c: any) => c.homeAway === 'away') ||
+            evt.competitions[0].competitors[1];
+          return {
+            id: evt.id,
+            date: new Date(evt.date),
+            statusState: evt.status.type.state,
+            statusShortDetail: evt.status.type.shortDetail,
+            clock: evt.status.displayClock,
+            home: {
+              team: homeComp?.team?.displayName || homeComp?.team?.name || 'TBD',
+              abbrev: homeComp?.team?.abbreviation || 'TBD',
+              score: homeComp?.score ?? '0',
+              logo: homeComp?.team?.logo || null,
+              color: homeComp?.team?.color || 'FFFFFF',
+            },
+            away: {
+              team: awayComp?.team?.displayName || awayComp?.team?.name || 'TBD',
+              abbrev: awayComp?.team?.abbreviation || 'TBD',
+              score: awayComp?.score ?? '0',
+              logo: awayComp?.team?.logo || null,
+              color: awayComp?.team?.color || 'FFFFFF',
+            },
+          };
+        });
+        setEvents(raw);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [id, selectedDate.queryDate],
+  );
 
-  useEffect(() => { fetchEvents(true); }, [fetchEvents]);
+  useEffect(() => {
+    fetchEvents(true);
+  }, [fetchEvents]);
 
   // Auto-poll every 5s when live matches exist
   const hasLive = events.some((e) => e.statusState === 'in');
-  useInterval(() => { fetchEvents(false); }, hasLive ? 5000 : null);
+  useInterval(
+    () => {
+      fetchEvents(false);
+    },
+    hasLive ? 5000 : null,
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -129,15 +162,23 @@ export default function LeagueScreen() {
   const handleToggleFav = async (evt: MatchEvent) => {
     const match: FavoriteMatch = {
       id: evt.id,
-      homeTeam: evt.home.team, homeAbbrev: evt.home.abbrev, homeLogo: evt.home.logo, homeColor: evt.home.color,
-      awayTeam: evt.away.team, awayAbbrev: evt.away.abbrev, awayLogo: evt.away.logo, awayColor: evt.away.color,
-      league: league?.name || id, leagueLogo: league?.logo || null,
+      homeTeam: evt.home.team,
+      homeAbbrev: evt.home.abbrev,
+      homeLogo: evt.home.logo,
+      homeColor: evt.home.color,
+      awayTeam: evt.away.team,
+      awayAbbrev: evt.away.abbrev,
+      awayLogo: evt.away.logo,
+      awayColor: evt.away.color,
+      league: league?.name || id,
+      leagueLogo: league?.logo || null,
       date: evt.date.toISOString(),
     };
     const nowFav = await toggleFavorite(match);
     setFavIds((prev) => {
       const next = new Set(prev);
-      if (nowFav) next.add(evt.id); else next.delete(evt.id);
+      if (nowFav) next.add(evt.id);
+      else next.delete(evt.id);
       return next;
     });
   };
@@ -174,29 +215,42 @@ export default function LeagueScreen() {
       <View style={styles.teamsCol}>
         <View style={styles.teamRow}>
           <View style={[styles.teamLogo, { overflow: 'hidden' }]}>
-            {evt.home.logo && <Image source={{ uri: evt.home.logo }} style={{ width: '100%', height: '100%' }} contentFit="contain" />}
+            {evt.home.logo && (
+              <Image source={{ uri: evt.home.logo }} style={{ width: '100%', height: '100%' }} contentFit="contain" />
+            )}
           </View>
-          <ThemedText style={styles.teamName} numberOfLines={1}>{evt.home.team}</ThemedText>
+          <ThemedText style={styles.teamName} numberOfLines={1}>
+            {evt.home.team}
+          </ThemedText>
           {evt.statusState !== 'pre' && (
-            <ThemedText style={[styles.score, evt.statusState === 'in' && styles.scoreLive]}>{evt.home.score}</ThemedText>
+            <ThemedText style={[styles.score, evt.statusState === 'in' && styles.scoreLive]}>
+              {evt.home.score}
+            </ThemedText>
           )}
         </View>
         <View style={styles.teamRow}>
           <View style={[styles.teamLogo, { overflow: 'hidden' }]}>
-            {evt.away.logo && <Image source={{ uri: evt.away.logo }} style={{ width: '100%', height: '100%' }} contentFit="contain" />}
+            {evt.away.logo && (
+              <Image source={{ uri: evt.away.logo }} style={{ width: '100%', height: '100%' }} contentFit="contain" />
+            )}
           </View>
-          <ThemedText style={styles.teamName} numberOfLines={1}>{evt.away.team}</ThemedText>
+          <ThemedText style={styles.teamName} numberOfLines={1}>
+            {evt.away.team}
+          </ThemedText>
           {evt.statusState !== 'pre' && (
-            <ThemedText style={[styles.score, evt.statusState === 'in' && styles.scoreLive]}>{evt.away.score}</ThemedText>
+            <ThemedText style={[styles.score, evt.statusState === 'in' && styles.scoreLive]}>
+              {evt.away.score}
+            </ThemedText>
           )}
         </View>
       </View>
 
       {/* Star */}
       <TouchableOpacity onPress={() => handleToggleFav(evt)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-        <SymbolView
-          name={favIds.has(evt.id) ? 'star.fill' : 'star'}
-          tintColor={favIds.has(evt.id) ? ACCENT : TEXT_MUTED}
+        <Icon
+          sf={favIds.has(evt.id) ? 'star.fill' : 'star'}
+          material={favIds.has(evt.id) ? 'star' : 'star-border'}
+          color={favIds.has(evt.id) ? ACCENT : TEXT_MUTED}
           size={16}
         />
       </TouchableOpacity>
@@ -213,15 +267,12 @@ export default function LeagueScreen() {
           headerTintColor: TEXT,
           headerTitleStyle: { fontWeight: '700', fontSize: 17 },
           headerBackTitle: '',
+          headerLeft,
         }}
       />
 
       {/* Date selector */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.dateBar}
-      >
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateBar} contentInsetAdjustmentBehavior="automatic">
         {dates.map((d, i) => (
           <TouchableOpacity
             key={d.queryDate}
@@ -239,21 +290,24 @@ export default function LeagueScreen() {
       </ScrollView>
 
       {loading ? (
-        <View style={styles.center}><ActivityIndicator color={ACCENT} size="large" /></View>
+        <View style={styles.center}>
+          <ActivityIndicator color={ACCENT} size="large" />
+        </View>
       ) : events.length === 0 ? (
         <View style={styles.center}>
-          <SymbolView name="calendar.badge.exclamationmark" tintColor={TEXT_MUTED} size={44} />
+          <Icon sf="calendar.badge.exclamationmark" material="event-busy" size={44} color={TEXT_MUTED} />
           <ThemedText style={styles.emptyText}>No matches on this day</ThemedText>
         </View>
       ) : (
         <ScrollView
+          contentInsetAdjustmentBehavior="automatic"
           contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={ACCENT} />}
         >
           {live.length > 0 && (
             <View style={styles.section}>
-              <ThemedText style={styles.sectionLabel}>🔴  Live</ThemedText>
+              <ThemedText style={styles.sectionLabel}>● Live</ThemedText>
               <View style={styles.matchGroup}>{live.map((e, i) => renderMatch(e, i, live.length))}</View>
             </View>
           )}
@@ -279,8 +333,14 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: BG },
   dateBar: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
   dateChip: {
-    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8,
-    backgroundColor: SURFACE, borderWidth: 1, borderColor: BORDER, alignItems: 'center', gap: 2,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: SURFACE,
+    borderWidth: 1,
+    borderColor: BORDER,
+    alignItems: 'center',
+    gap: 2,
   },
   dateChipActive: { backgroundColor: ACCENT, borderColor: ACCENT },
   dateChipDate: { fontSize: 17, fontWeight: '700', color: TEXT },
@@ -290,13 +350,21 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 15, color: TEXT_MUTED, fontWeight: '500' },
   section: { marginTop: 20 },
   sectionLabel: {
-    fontSize: 12, fontWeight: '600', color: TEXT_SECONDARY,
-    textTransform: 'uppercase', letterSpacing: 0.5,
-    paddingHorizontal: 16, marginBottom: 8,
+    fontSize: 12,
+    fontWeight: '600',
+    color: TEXT_SECONDARY,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    paddingHorizontal: 16,
+    marginBottom: 8,
   },
   matchGroup: {
-    marginHorizontal: 16, backgroundColor: SURFACE,
-    borderRadius: 10, borderWidth: 1, borderColor: BORDER, overflow: 'hidden',
+    marginHorizontal: 16,
+    backgroundColor: SURFACE,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: BORDER,
+    overflow: 'hidden',
   },
   matchRow: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
   matchRowBorder: { borderBottomWidth: 1, borderBottomColor: BORDER },
