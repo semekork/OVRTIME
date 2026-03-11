@@ -1,56 +1,67 @@
-# Welcome to your Expo app 👋
+# OVRTIME
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+OVRTIME is a highly performant, pixel-perfect clone of the "LiveScore" app built with React Native and Expo. It provides live sports scores, match details, and a seamless native experience to keep you up-to-date with your favorite leagues and matches. The app is completely free, requires no user authentication, and is powered by public APIs.
 
-## Get started
+## Features
 
-1. Install dependencies
+- **Live Scores & Updates:** Automatic score refreshing for live matches every 5 seconds (configurable via the Settings screen).
+- **Extensive Coverage:** Track matches across over 30 global soccer leagues.
+- **Dynamic Match Details:** Sub-screens for specific matches including head-to-head data.
+- **League Pages:** Dive deep into league-specific data and standings.
+- **Native User Experience:** Featuring a native search bar, bottom tabs, and iOS Live Activities via `@expo/widgets`.
+- **Match Organization:** Matches grouped by League/Country with compact match rows and a star icon for marking favorites.
+- **Premium Dark UI:** A striking interface characterized by a deep black background, dark grey separators, white text, and bright orange for live elements.
+- **Easy Navigation:** Includes a horizontal scrollable date selector for looking at past and upcoming matches.
 
-   ```bash
-   npm install
-   ```
+## Tech Stack
 
-2. Start the app
+- **Framework:** [Expo SDK 55](https://expo.dev/) & [React Native](https://reactnative.dev/)
+- **Routing:** [Expo Router v55](https://docs.expo.dev/router/introduction) with native tabs
+- **Styling:** [NativeWind](https://www.nativewind.dev/) (Tailwind CSS for React Native)
+- **Data Fetching & State:** [TanStack Query](https://tanstack.com/query/latest)
+- **Widgets:** iOS Live Activities utilizing `expo-widgets` (requires native build)
+- **Data Source:** [TheSportsDB API](https://www.thesportsdb.com/) for up-to-date soccer scores and data
 
-   ```bash
-   npx expo start
-   ```
+## Getting Started
 
-In the output, you'll find options to open the app in a
+### Prerequisites
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- Node.js installed
+- iOS Simulator or an Android Emulator
+- [Expo CLI](https://docs.expo.dev/more/expo-cli/)
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+### 1. Install Dependencies
 
-## Get a fresh project
-
-When you're ready, run:
+Clone this repository, navigate to the root directory, and run:
 
 ```bash
-npm run reset-project
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### 2. Run the App
 
-### Other setup steps
+For standard development:
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+```bash
+npx expo start
+```
 
-## Learn more
+*Note: Since this application leverages `@expo/widgets` for iOS Live Activities, it requires a custom native build (Development Build) rather than Expo Go. To run the app with live activities:*
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+# Run the iOS development build
+npx expo run:ios
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Project Structure
 
-## Join the community
+- `src/` - Global components, context, styling layouts, and utility functions
+- `app/` - File-based routing corresponding to application screens (Home, Search, Leagues, Match, Settings)
 
-Join our community of developers creating universal apps.
+## Configuration
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+The automatic score refresh loop (default: 5 seconds for live matches) can be toggled and configured within the in-app **Settings** screen.
+
+---
+
+Built with focus on information density, utility, and premium native design patterns.
