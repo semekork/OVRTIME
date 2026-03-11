@@ -7,8 +7,9 @@ import {
   TouchableOpacity,
   Platform,
   Alert,
-  Animated,
+  Animated as RNAnimated,
 } from 'react-native';
+import Animated, { SharedTransition } from 'react-native-reanimated';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,15 +19,18 @@ import { Icon } from '@/components/icon';
 import { useInterval } from '@/hooks/use-interval';
 import { getLeagueById } from '@/utils/leagues';
 import { startMatchActivity, updateMatchActivity, endMatchActivity, hasActiveActivity } from '@/utils/liveActivity';
+import { C } from '@/constants/theme';
 
-const ACCENT = '#FF6B00';
-const BG = '#000000';
-const SURFACE = '#111111';
-const BORDER = '#1E1E1E';
-const TEXT = '#FFFFFF';
-const TEXT_MUTED = '#666666';
-const TEXT_SECONDARY = '#999999';
-const LIVE_COLOR = '#FF3B30';
+const springTransition = SharedTransition.springify().damping(20).stiffness(200);
+
+const ACCENT = C.accent;
+const BG = C.bg;
+const SURFACE = C.surface;
+const BORDER = C.border;
+const TEXT = C.text;
+const TEXT_MUTED = C.textMuted;
+const TEXT_SECONDARY = C.textSecondary;
+const LIVE_COLOR = C.live;
 
 type TeamInfo = {
   id: string;
@@ -299,13 +303,13 @@ export default function MatchScreen() {
   const autoStartedRef = useRef(false);
 
   // Pulsing animation for the live dot
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pulseAnim = useRef(new RNAnimated.Value(1)).current;
   useEffect(() => {
     if (!isLive) return;
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 0.3, duration: 800, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+    const anim = RNAnimated.loop(
+      RNAnimated.sequence([
+        RNAnimated.timing(pulseAnim, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+        RNAnimated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
       ]),
     );
     anim.start();
@@ -442,7 +446,7 @@ export default function MatchScreen() {
           <View style={styles.heroBadge}>
             {isLive ? (
               <View style={styles.liveBadge}>
-                <Animated.View style={[styles.liveDot, { opacity: pulseAnim }]} />
+                <RNAnimated.View style={[styles.liveDot, { opacity: pulseAnim }]} />
                 <ThemedText style={styles.liveBadgeText}>
                   {match.clock}' — {match.statusDetail}
                 </ThemedText>
@@ -455,13 +459,17 @@ export default function MatchScreen() {
           <View style={styles.heroTeams}>
             {/* Home */}
             <View style={styles.heroTeam}>
-              <View style={styles.heroLogoRing}>
+              <Animated.View
+                sharedTransitionTag={`match-home-logo-${eventId}`}
+                sharedTransitionStyle={springTransition}
+                style={styles.heroLogoRing}
+              >
                 {match.home.logo ? (
                   <Image source={{ uri: match.home.logo }} style={styles.heroLogo} contentFit="contain" />
                 ) : (
                   <ThemedText style={styles.logoChar}>{match.home.abbrev[0]}</ThemedText>
                 )}
-              </View>
+              </Animated.View>
               <ThemedText style={styles.heroTeamName} numberOfLines={2}>
                 {match.home.name}
               </ThemedText>
@@ -485,13 +493,17 @@ export default function MatchScreen() {
 
             {/* Away */}
             <View style={styles.heroTeam}>
-              <View style={styles.heroLogoRing}>
+              <Animated.View
+                sharedTransitionTag={`match-away-logo-${eventId}`}
+                sharedTransitionStyle={springTransition}
+                style={styles.heroLogoRing}
+              >
                 {match.away.logo ? (
                   <Image source={{ uri: match.away.logo }} style={styles.heroLogo} contentFit="contain" />
                 ) : (
                   <ThemedText style={styles.logoChar}>{match.away.abbrev[0]}</ThemedText>
                 )}
-              </View>
+              </Animated.View>
               <ThemedText style={styles.heroTeamName} numberOfLines={2}>
                 {match.away.name}
               </ThemedText>
