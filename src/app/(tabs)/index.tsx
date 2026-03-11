@@ -109,6 +109,12 @@ export default function HomeScreen() {
               });
             }
 
+            // Strip any leading '#' so color is always a bare hex string
+            const normaliseColor = (c?: string) => {
+              if (!c) return 'FFFFFF';
+              return c.startsWith('#') ? c.slice(1) : c;
+            };
+
             const parsedEvents = res.events.map((evt: any) => {
               const homeComp =
                 evt.competitions[0].competitors.find((c: any) => c.homeAway === 'home') ||
@@ -116,6 +122,9 @@ export default function HomeScreen() {
               const awayComp =
                 evt.competitions[0].competitors.find((c: any) => c.homeAway === 'away') ||
                 evt.competitions[0].competitors[1];
+              // ESPN scoreboard uses team.logo; fall back to logos[0].href if needed
+              const homeLogo = homeComp?.team?.logos?.[0]?.href || homeComp?.team?.logo || null;
+              const awayLogo = awayComp?.team?.logos?.[0]?.href || awayComp?.team?.logo || null;
               return {
                 id: evt.id,
                 name: evt.name,
@@ -128,15 +137,15 @@ export default function HomeScreen() {
                   team: homeComp?.team?.displayName || homeComp?.team?.name || 'TBD',
                   abbrev: homeComp?.team?.abbreviation || 'TBD',
                   score: homeComp?.score || '0',
-                  logo: homeComp?.team?.logo || null,
-                  color: homeComp?.team?.color || 'FFFFFF',
+                  logo: homeLogo,
+                  color: normaliseColor(homeComp?.team?.color),
                 },
                 away: {
                   team: awayComp?.team?.displayName || awayComp?.team?.name || 'TBD',
                   abbrev: awayComp?.team?.abbreviation || 'TBD',
                   score: awayComp?.score || '0',
-                  logo: awayComp?.team?.logo || null,
-                  color: awayComp?.team?.color || 'FFFFFF',
+                  logo: awayLogo,
+                  color: normaliseColor(awayComp?.team?.color),
                 },
                 league: leagueInfo?.name || leagueData?.name || 'Unknown',
                 leagueLogo: leagueInfo?.logo || leagueData?.logos?.[0]?.href || null,
@@ -223,7 +232,6 @@ export default function HomeScreen() {
   return (
     <ThemedView style={styles.container}>
       <ScrollView
-
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
         showsVerticalScrollIndicator={false}
       >
