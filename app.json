@@ -10,7 +10,7 @@
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#000000",
     "ios": {
-      "icon": "./assets/expo.icon",
+      "icon": "./assets/soccer.icon",
       "bundleIdentifier": "com.semekor.k.OVRTIME",
       "infoPlist": {
         "NSSupportsLiveActivities": true,
