@@ -1,16 +1,8 @@
 import React, { useState, useCallback } from 'react';
-import {
-  StyleSheet,
-  View,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  ActivityIndicator,
-  Linking,
-} from 'react-native';
+import { StyleSheet, View, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
+import { Icon } from '@/components/icon';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 
@@ -51,7 +43,7 @@ async function fetchNews(): Promise<NewsArticle[]> {
     fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/${l.id}/news?limit=10`)
       .then((r) => r.json())
       .then((data) => ({ data, league: l.name }))
-      .catch(() => null)
+      .catch(() => null),
   );
 
   const results = await Promise.all(fetches);
@@ -75,9 +67,7 @@ async function fetchNews(): Promise<NewsArticle[]> {
   }
 
   // Sort by date descending
-  allArticles.sort(
-    (a, b) => new Date(b.published).getTime() - new Date(a.published).getTime()
-  );
+  allArticles.sort((a, b) => new Date(b.published).getTime() - new Date(a.published).getTime());
   return allArticles;
 }
 
@@ -134,25 +124,19 @@ export default function NewsScreen() {
           {loading ? (
             <ActivityIndicator color={ACCENT} size="small" />
           ) : (
-            <SymbolView name="arrow.clockwise" tintColor={TEXT_MUTED} size={18} />
+            <Icon sf="arrow.clockwise" material="refresh" size={18} color={TEXT_MUTED} />
           )}
         </TouchableOpacity>
       </View>
 
       {/* Category Filter */}
       {categories.length > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterBar}
-        >
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterBar} contentInsetAdjustmentBehavior="automatic">
           <TouchableOpacity
             style={[styles.filterChip, !filter && styles.filterChipActive]}
             onPress={() => setFilter(null)}
           >
-            <ThemedText style={[styles.filterText, !filter && styles.filterTextActive]}>
-              All
-            </ThemedText>
+            <ThemedText style={[styles.filterText, !filter && styles.filterTextActive]}>All</ThemedText>
           </TouchableOpacity>
           {categories.map((cat) => (
             <TouchableOpacity
@@ -160,11 +144,7 @@ export default function NewsScreen() {
               style={[styles.filterChip, filter === cat && styles.filterChipActive]}
               onPress={() => setFilter(cat === filter ? null : cat)}
             >
-              <ThemedText
-                style={[styles.filterText, filter === cat && styles.filterTextActive]}
-              >
-                {cat}
-              </ThemedText>
+              <ThemedText style={[styles.filterText, filter === cat && styles.filterTextActive]}>{cat}</ThemedText>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -172,11 +152,9 @@ export default function NewsScreen() {
 
       {/* Content */}
       <ScrollView
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: insets.bottom + 100 },
-        ]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
         showsVerticalScrollIndicator={false}
+        contentInsetAdjustmentBehavior="automatic"
       >
         {loading && articles.length === 0 ? (
           <View style={styles.loadingContainer}>
@@ -184,7 +162,7 @@ export default function NewsScreen() {
           </View>
         ) : filtered.length === 0 ? (
           <View style={styles.emptyState}>
-            <SymbolView name="newspaper" tintColor={TEXT_MUTED} size={48} />
+            <Icon sf="newspaper" material="article" size={48} color={TEXT_MUTED} />
             <ThemedText style={styles.emptyText}>No news available</ThemedText>
           </View>
         ) : (
@@ -197,24 +175,16 @@ export default function NewsScreen() {
                 activeOpacity={0.85}
               >
                 {filtered[0].image ? (
-                  <Image
-                    source={{ uri: filtered[0].image }}
-                    style={styles.heroImage}
-                    contentFit="cover"
-                  />
+                  <Image source={{ uri: filtered[0].image }} style={styles.heroImage} contentFit="cover" />
                 ) : (
                   <View style={styles.heroImagePlaceholder} />
                 )}
                 <View style={styles.heroContent}>
                   <View style={styles.heroCategoryRow}>
                     <View style={styles.categoryBadge}>
-                      <ThemedText style={styles.categoryBadgeText}>
-                        {filtered[0].category}
-                      </ThemedText>
+                      <ThemedText style={styles.categoryBadgeText}>{filtered[0].category}</ThemedText>
                     </View>
-                    <ThemedText style={styles.heroTime}>
-                      {timeAgo(filtered[0].published)}
-                    </ThemedText>
+                    <ThemedText style={styles.heroTime}>{timeAgo(filtered[0].published)}</ThemedText>
                   </View>
                   <ThemedText style={styles.heroHeadline} numberOfLines={3}>
                     {filtered[0].headline}
@@ -231,21 +201,14 @@ export default function NewsScreen() {
               {filtered.slice(1).map((article, idx) => (
                 <TouchableOpacity
                   key={article.id}
-                  style={[
-                    styles.articleRow,
-                    idx < filtered.length - 2 && styles.articleRowBorder,
-                  ]}
+                  style={[styles.articleRow, idx < filtered.length - 2 && styles.articleRowBorder]}
                   onPress={() => openArticle(article.link)}
                   activeOpacity={0.75}
                 >
                   <View style={styles.articleInfo}>
                     <View style={styles.articleMeta}>
-                      <ThemedText style={styles.articleCategory}>
-                        {article.category}
-                      </ThemedText>
-                      <ThemedText style={styles.articleTime}>
-                        {timeAgo(article.published)}
-                      </ThemedText>
+                      <ThemedText style={styles.articleCategory}>{article.category}</ThemedText>
+                      <ThemedText style={styles.articleTime}>{timeAgo(article.published)}</ThemedText>
                     </View>
                     <ThemedText style={styles.articleHeadline} numberOfLines={2}>
                       {article.headline}
@@ -255,11 +218,7 @@ export default function NewsScreen() {
                     </ThemedText>
                   </View>
                   {article.image && (
-                    <Image
-                      source={{ uri: article.image }}
-                      style={styles.articleThumb}
-                      contentFit="cover"
-                    />
+                    <Image source={{ uri: article.image }} style={styles.articleThumb} contentFit="cover" />
                   )}
                 </TouchableOpacity>
               ))}
@@ -303,6 +262,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: BORDER,
     backgroundColor: SURFACE,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   filterChipActive: {
     backgroundColor: ACCENT,
@@ -312,6 +274,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: TEXT_MUTED,
+    lineHeight: 27,
   },
   filterTextActive: {
     color: '#000',
