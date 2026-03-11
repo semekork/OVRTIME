@@ -1,0 +1,11 @@
+.expo/
+dist/
+node_modules/
+package-lock.json
+ios/
+android/
+
+
+# Ignore lock files
+package-lock.json
+yarn.lock
