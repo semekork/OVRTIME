@@ -17,10 +17,10 @@ OVRTIME is a highly performant, pixel-perfect clone of the "LiveScore" app built
 
 - **Framework:** [Expo SDK 55](https://expo.dev/) & [React Native](https://reactnative.dev/)
 - **Routing:** [Expo Router v55](https://docs.expo.dev/router/introduction) with native tabs
-- **Styling:** [NativeWind](https://www.nativewind.dev/) (Tailwind CSS for React Native)
-- **Data Fetching & State:** [TanStack Query](https://tanstack.com/query/latest)
+- **Styling:** React Native StyleSheet with a custom theme system
+- **Data Fetching:** Standard Fetch API
 - **Widgets:** iOS Live Activities utilizing `expo-widgets` (requires native build)
-- **Data Source:** [TheSportsDB API](https://www.thesportsdb.com/) for up-to-date soccer scores and data
+- **Data Source:** ESPN API for up-to-date soccer scores and data
 
 ## Getting Started
 
