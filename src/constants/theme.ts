@@ -63,3 +63,26 @@ export const Spacing = {
 
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
 export const MaxContentWidth = 800;
+
+// ─── App-wide color palette ──────────────────────────────────────────────────
+// Import `C` in any screen to reference these instead of re-declaring locally.
+export const C = {
+  /** Brand orange — live indicators, CTA, active states */
+  accent: '#FF6B00',
+  /** True black — page background */
+  bg: '#0f0f0fff',
+  /** Slightly lifted dark — cards, inputs, surface elements */
+  surface: '#111111',
+  /** Subtle border between elements */
+  border: '#1E1E1E',
+  /** Primary text */
+  text: '#FFFFFF',
+  /** Secondary / muted text */
+  textMuted: '#666666',
+  /** Tertiary text */
+  textSecondary: '#999999',
+  /** Live / in-progress red */
+  live: '#FF3B30',
+  /** Destructive actions red (same as live, aliased for semantics) */
+  destructive: '#FF3B30',
+} as const;
