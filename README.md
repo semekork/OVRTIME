@@ -46,7 +46,7 @@ For standard development:
 npx expo start
 ```
 
-*Note: Since this application leverages `@expo/widgets` for iOS Live Activities, it requires a custom native build (Development Build) rather than Expo Go. To run the app with live activities:*
+_Note: Since this application leverages `@expo/widgets` for iOS Live Activities, it requires a custom native build (Development Build) rather than Expo Go. To run the app with live activities:_
 
 ```bash
 # Run the iOS development build
