@@ -5,9 +5,10 @@ import * as SystemUI from 'expo-system-ui';
 import React, { useEffect } from 'react';
 import { Appearance } from 'react-native';
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { C } from '@/constants/theme';
 
-const BG = '#000000';
-const TEXT = '#FFFFFF';
+const BG = C.bg;
+const TEXT = C.text;
 
 const customDarkTheme = {
   ...DarkTheme,
