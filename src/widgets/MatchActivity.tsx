@@ -52,7 +52,7 @@ const MatchActivity = (props?: MatchActivityProps) => {
       <ZStack modifiers={[
         frame({ maxWidth: Infinity, height: 3 }),
         background(isLive ? ACCENT_GREEN : GRAY_SUBTLE),
-      ]} />
+      ]}>{null}</ZStack>
 
       <HStack modifiers={[
         padding({ horizontal: 16, vertical: 10 }),
@@ -184,7 +184,7 @@ const MatchActivity = (props?: MatchActivityProps) => {
         frame({ width: 28, height: 4 }),
         background(ACCENT_GREEN),
         cornerRadius(2),
-      ]} />
+      ]}>{null}</ZStack>
       <Text modifiers={[
         font({ weight: 'black', size: 13 }),
         foregroundStyle(OFF_WHITE),
@@ -217,7 +217,7 @@ const MatchActivity = (props?: MatchActivityProps) => {
         frame({ width: 28, height: 4 }),
         background(ACCENT_AMBER),
         cornerRadius(2),
-      ]} />
+      ]}>{null}</ZStack>
       <Text modifiers={[
         font({ weight: 'black', size: 13 }),
         foregroundStyle(OFF_WHITE),
@@ -269,7 +269,7 @@ const MatchActivity = (props?: MatchActivityProps) => {
         frame({ width: 32, height: 1 }),
         background(BG_SEPARATOR),
         padding({ vertical: 4 }),
-      ]} />
+      ]}>{null}</ZStack>
       <Text modifiers={[font({ size: 9 }), foregroundStyle(GRAY_DIM)]}>
         {props.leagueName}
       </Text>
