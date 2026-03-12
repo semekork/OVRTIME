@@ -1,10 +1,11 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Icon } from '@/components/icon';
-import { ScrollView, StyleSheet, TouchableOpacity, View, ActivityIndicator, Platform } from 'react-native';
+import { ScrollView, StyleSheet, TouchableOpacity, View, ActivityIndicator, Platform, RefreshControl } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'expo-router';
 import Animated, { SharedTransition } from 'react-native-reanimated';
 import { toggleFavorite, type FavoriteMatch } from '@/utils/favorites';
@@ -12,6 +13,7 @@ import { HOME_FETCH_LEAGUES, getLeagueById } from '@/utils/leagues';
 import { getRefreshInterval, getHideSpoilers, settingsEmitter } from '@/utils/settings';
 import { useInterval } from '@/hooks/use-interval';
 import { hasActiveActivity } from '@/utils/liveActivity';
+import { setupNotifications, sendGoalNotification } from '@/utils/notifications';
 import { C } from '@/constants/theme';
 
 const springTransition = SharedTransition.springify().damping(20).stiffness(200);
@@ -48,14 +50,38 @@ const generateDates = () => {
   return dates;
 };
 
+function formatCountdown(matchDate: Date): string {
+  const diff = matchDate.getTime() - Date.now();
+  if (diff <= 0) return 'Starting soon';
+  const totalMins = Math.floor(diff / 60000);
+  const hrs = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  if (hrs > 24) {
+    const days = Math.floor(hrs / 24);
+    return `${days}d ${hrs % 24}h`;
+  }
+  if (hrs > 0) return `${hrs}h ${mins}m`;
+  return `${mins}m`;
+}
+
+function useCountdown() {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 60000);
+    return () => clearInterval(id);
+  }, []);
+}
+
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  useCountdown();
   const [dates] = useState(generateDates);
   const [selectedDateIndex, setSelectedDateIndex] = useState(2);
   const [events, setEvents] = useState<any[]>([]);
   const [leagues, setLeagues] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [hideSpoilers, setHideSpoilersState] = useState(false);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [refreshInterval, setRefreshIntervalState] = useState<number>(5000);
@@ -63,20 +89,36 @@ export default function HomeScreen() {
   const selectedDate = dates[selectedDateIndex];
 
   // Load persisted settings
-  useEffect(() => {
-    const loadSettings = async () => {
-      const [ri, hs] = await Promise.all([getRefreshInterval(), getHideSpoilers()]);
+  const loadSettingsAndFavorites = useCallback(async () => {
+    try {
+      const [ri, hs, favsStr] = await Promise.all([
+        getRefreshInterval(),
+        getHideSpoilers(),
+        AsyncStorage.getItem('favorites'),
+      ]);
       setRefreshIntervalState(ri === 0 ? 0 : ri * 1000);
       setHideSpoilersState(hs);
-    };
-    loadSettings();
+      if (favsStr) {
+        const parsed = JSON.parse(favsStr) as FavoriteMatch[];
+        setFavoriteIds(new Set(parsed.map((f) => f.id)));
+      }
+    } catch (e) {
+      console.error('Failed to load settings or favorites', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    setupNotifications();
+    loadSettingsAndFavorites();
     const unsub = settingsEmitter.subscribe(() => {
-      loadSettings();
+      loadSettingsAndFavorites();
     });
     return () => {
       unsub();
     };
-  }, []);
+  }, [loadSettingsAndFavorites]);
+
+  const prevScoresRef = useRef<Map<string, { home: string; away: string }>>(new Map());
 
   const fetchMatches = useCallback(
     async (silent = false) => {
@@ -162,6 +204,22 @@ export default function HomeScreen() {
           if (aO !== bO) return aO - bO;
           return a.date.getTime() - b.date.getTime();
         });
+
+        // Trigger notifications for score changes on favorited matches
+        const newScoresMap = new Map<string, { home: string; away: string }>();
+        allEvents.forEach((evt) => {
+          newScoresMap.set(evt.id, { home: evt.home.score, away: evt.away.score });
+          
+          if (favoriteIds.has(evt.id)) {
+            const prev = prevScoresRef.current.get(evt.id);
+            if (prev && (prev.home !== evt.home.score || prev.away !== evt.away.score)) {
+              // Score changed!
+              sendGoalNotification(evt.name, evt.home.team, evt.away.team, evt.home.score, evt.away.score);
+            }
+          }
+        });
+        prevScoresRef.current = newScoresMap;
+
         setEvents(allEvents);
         setLeagues(activeLeagues);
       } catch (e) {
@@ -234,6 +292,17 @@ export default function HomeScreen() {
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={async () => {
+              setRefreshing(true);
+              await fetchMatches(true);
+              setRefreshing(false);
+            }}
+            tintColor={ACCENT}
+          />
+        }
       >
         {/* Header */}
         <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
@@ -363,6 +432,11 @@ export default function HomeScreen() {
                             ? '? — ?'
                             : `${liveMatch.home.score} — ${liveMatch.away.score}`}
                       </ThemedText>
+                      {liveMatch.status.state === 'pre' && (
+                        <ThemedText style={{ fontSize: 13, color: TEXT_MUTED, fontWeight: '600', marginTop: 4 }}>
+                          Starts in {formatCountdown(liveMatch.date)}
+                        </ThemedText>
+                      )}
                     </View>
 
                     <View style={styles.team}>
@@ -454,10 +528,7 @@ export default function HomeScreen() {
                         </ThemedText>
                         <ThemedText style={[styles.eventTime, evt.status.state === 'in' && { color: LIVE_COLOR }]}>
                           {evt.status.state === 'pre'
-                            ? evt.date.toLocaleTimeString('en-US', {
-                                hour: 'numeric',
-                                minute: '2-digit',
-                              })
+                            ? `In ${formatCountdown(evt.date)}`
                             : evt.status.state === 'in'
                               ? `${evt.clock}'`
                               : evt.status.shortDetail}
