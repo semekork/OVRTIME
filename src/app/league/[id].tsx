@@ -41,6 +41,23 @@ type MatchEvent = {
   away: { team: string; abbrev: string; score: string; logo: string | null; color: string };
 };
 
+type StandingsTeam = {
+  id: string;
+  rank: number;
+  name: string;
+  abbrev: string;
+  logo: string | null;
+  played: string;
+  won: string;
+  drawn: string;
+  lost: string;
+  gf: string;
+  ga: string;
+  gd: string;
+  points: string;
+  noteColor?: string;
+};
+
 const toLocalQueryDate = (d: Date) => {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -90,12 +107,54 @@ export default function LeagueScreen() {
   const headerLeft = Platform.OS === 'android' ? () => <AndroidBack /> : undefined;
   const [dates] = useState(generateDates);
   const [selectedIdx, setSelectedIdx] = useState(3); // today
+  const [viewMode, setViewMode] = useState<'matches' | 'standings'>('matches');
   const [events, setEvents] = useState<MatchEvent[]>([]);
+  const [standings, setStandings] = useState<StandingsTeam[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingStandings, setLoadingStandings] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [favIds, setFavIds] = useState<Set<string>>(new Set());
 
   const selectedDate = dates[selectedIdx];
+
+  const fetchLeageStandings = useCallback(async () => {
+    try {
+      setLoadingStandings(true);
+      const res = await fetch(`https://site.api.espn.com/apis/v2/sports/soccer/${id}/standings`);
+      const data = await res.json();
+      const entries = data.children?.[0]?.standings?.entries || [];
+      const parsed = entries.map((e: any) => {
+        const getStat = (name: string) => e.stats?.find((s: any) => s.name === name)?.displayValue || '0';
+        return {
+          id: e.team.id,
+          rank: parseInt(getStat('rank'), 10) || 0,
+          name: e.team.displayName || e.team.name,
+          abbrev: e.team.abbreviation,
+          logo: e.team.logos?.[0]?.href || null,
+          played: getStat('gamesPlayed'),
+          won: getStat('wins'),
+          drawn: getStat('ties'),
+          lost: getStat('losses'),
+          gf: getStat('pointsFor'),
+          ga: getStat('pointsAgainst'),
+          gd: getStat('pointDifferential'),
+          points: getStat('points'),
+          noteColor: e.note?.color,
+        };
+      });
+      setStandings(parsed);
+    } catch (e) {
+      console.error('fetchStandings error', e);
+    } finally {
+      setLoadingStandings(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (viewMode === 'standings' && standings.length === 0) {
+      fetchLeageStandings();
+    }
+  }, [viewMode, fetchLeageStandings, standings.length]);
 
   const fetchEvents = useCallback(
     async (showLoader = false) => {
@@ -287,13 +346,31 @@ export default function LeagueScreen() {
         }}
       />
 
-      {/* Date selector */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.dateBar}
-        contentInsetAdjustmentBehavior="automatic"
-      >
+      {/* View Toggle */}
+      <View style={styles.tabContainer}>
+        <TouchableOpacity
+          style={[styles.tab, viewMode === 'matches' && styles.tabActive]}
+          onPress={() => setViewMode('matches')}
+        >
+          <ThemedText style={[styles.tabText, viewMode === 'matches' && styles.tabTextActive]}>Matches</ThemedText>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, viewMode === 'standings' && styles.tabActive]}
+          onPress={() => setViewMode('standings')}
+        >
+          <ThemedText style={[styles.tabText, viewMode === 'standings' && styles.tabTextActive]}>Standings</ThemedText>
+        </TouchableOpacity>
+      </View>
+
+      {viewMode === 'matches' ? (
+        <>
+          {/* Date selector */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.dateBar}
+            contentInsetAdjustmentBehavior="automatic"
+          >
         {dates.map((d, i) => (
           <TouchableOpacity
             key={d.queryDate}
@@ -342,6 +419,67 @@ export default function LeagueScreen() {
             <View style={styles.section}>
               <ThemedText style={styles.sectionLabel}>Finished</ThemedText>
               <View style={styles.matchGroup}>{finished.map((e, i) => renderMatch(e, i, finished.length))}</View>
+            </View>
+          )}
+        </ScrollView>
+      )}
+        </>
+      ) : (
+        /* Standings View */
+        <ScrollView
+          contentInsetAdjustmentBehavior="automatic"
+          contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+          showsVerticalScrollIndicator={false}
+        >
+          {loadingStandings && standings.length === 0 ? (
+            <View style={styles.center}>
+              <ActivityIndicator color={ACCENT} size="large" />
+            </View>
+          ) : standings.length === 0 ? (
+            <View style={styles.center}>
+              <Icon sf="table" material="table-chart" size={44} color={TEXT_MUTED} />
+              <ThemedText style={styles.emptyText}>Standings not available</ThemedText>
+            </View>
+          ) : (
+            <View style={styles.section}>
+              <View style={styles.standingsHeader}>
+                <ThemedText style={[styles.standingsHeaderText, { width: 28, textAlign: 'center' }]}>#</ThemedText>
+                <ThemedText style={[styles.standingsHeaderText, { flex: 1 }]}>Team</ThemedText>
+                <View style={styles.standingsStatsRow}>
+                  <ThemedText style={styles.standingsHeaderText}>P</ThemedText>
+                  <ThemedText style={styles.standingsHeaderText}>W</ThemedText>
+                  <ThemedText style={styles.standingsHeaderText}>D</ThemedText>
+                  <ThemedText style={styles.standingsHeaderText}>L</ThemedText>
+                  <ThemedText style={styles.standingsHeaderText}>GD</ThemedText>
+                  <ThemedText style={[styles.standingsHeaderText, { color: TEXT }]}>Pts</ThemedText>
+                </View>
+              </View>
+              <View style={styles.matchGroup}>
+                {standings.map((team, idx) => (
+                  <View key={team.id} style={[styles.standingsRow, idx < standings.length - 1 && styles.matchRowBorder]}>
+                    <View style={styles.standingsRankIndicator}>
+                      <ThemedText style={styles.standingsRank}>{team.rank}</ThemedText>
+                      {team.noteColor && (
+                        <View style={[styles.standingsColorBadge, { backgroundColor: team.noteColor.startsWith('#') ? team.noteColor : `#${team.noteColor}` }]} />
+                      )}
+                    </View>
+                    <View style={styles.standingsTeamInfo}>
+                      <View style={[styles.teamLogo, { width: 16, height: 16 }]}>
+                        {team.logo && <Image source={{ uri: team.logo }} style={{ width: '100%', height: '100%' }} contentFit="contain" />}
+                      </View>
+                      <ThemedText style={styles.standingsTeamName} numberOfLines={1}>{team.name}</ThemedText>
+                    </View>
+                    <View style={styles.standingsStatsRow}>
+                      <ThemedText style={styles.standingsStat}>{team.played}</ThemedText>
+                      <ThemedText style={styles.standingsStat}>{team.won}</ThemedText>
+                      <ThemedText style={styles.standingsStat}>{team.drawn}</ThemedText>
+                      <ThemedText style={styles.standingsStat}>{team.lost}</ThemedText>
+                      <ThemedText style={styles.standingsStat}>{team.gd}</ThemedText>
+                      <ThemedText style={[styles.standingsStat, { color: TEXT, fontWeight: '700' }]}>{team.points}</ThemedText>
+                    </View>
+                  </View>
+                ))}
+              </View>
             </View>
           )}
         </ScrollView>
@@ -400,4 +538,19 @@ const styles = StyleSheet.create({
   teamName: { flex: 1, fontSize: 14, fontWeight: '600', color: TEXT },
   score: { fontSize: 14, fontWeight: '800', color: TEXT, minWidth: 20, textAlign: 'right' },
   scoreLive: { color: LIVE_COLOR },
+  tabContainer: { flexDirection: 'row', marginHorizontal: 16, marginTop: 12, backgroundColor: SURFACE, borderRadius: 8, padding: 4, borderWidth: 1, borderColor: BORDER },
+  tab: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 6 },
+  tabActive: { backgroundColor: '#222' },
+  tabText: { fontSize: 13, fontWeight: '600', color: TEXT_MUTED },
+  tabTextActive: { color: TEXT },
+  standingsHeader: { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 8, alignItems: 'center' },
+  standingsHeaderText: { fontSize: 11, fontWeight: '600', color: TEXT_SECONDARY, textTransform: 'uppercase' },
+  standingsRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16, gap: 8 },
+  standingsRankIndicator: { width: 28, alignItems: 'center', justifyContent: 'center' },
+  standingsRank: { fontSize: 13, fontWeight: '600', color: TEXT_MUTED },
+  standingsColorBadge: { position: 'absolute', left: -10, top: '50%', marginTop: -4, width: 4, height: 8, borderRadius: 2 },
+  standingsTeamInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  standingsTeamName: { fontSize: 14, fontWeight: '600', color: TEXT },
+  standingsStatsRow: { flexDirection: 'row', alignItems: 'center', gap: 12, width: 140, justifyContent: 'flex-end' },
+  standingsStat: { width: 20, textAlign: 'center', fontSize: 13, fontWeight: '500', color: TEXT_MUTED },
 });
