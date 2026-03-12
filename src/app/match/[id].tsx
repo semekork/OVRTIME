@@ -65,6 +65,7 @@ type Lineups = {
 
 type MatchDetail = {
   id: string;
+  date: string;
   statusState: string;
   statusDetail: string;
   clock: string;
@@ -99,10 +100,7 @@ async function fetchMatchDetail(leagueId: string, eventId: string): Promise<Matc
     const getTeam = (homeAway: 'home' | 'away'): TeamInfo => {
       const c = comp.competitors.find((x: any) => x.homeAway === homeAway) || comp.competitors[0];
       // ESPN summary API exposes logo at team.logos[0].href or team.logo (scoreboard)
-      const logo =
-        c.team?.logos?.[0]?.href ||
-        c.team?.logo ||
-        null;
+      const logo = c.team?.logos?.[0]?.href || c.team?.logo || null;
       // Normalise color — strip leading '#' so we store a bare hex string
       const rawColor: string = c.team?.color || 'FFFFFF';
       const color = rawColor.startsWith('#') ? rawColor.slice(1) : rawColor;
@@ -204,6 +202,7 @@ async function fetchMatchDetail(leagueId: string, eventId: string): Promise<Matc
 
     return {
       id: eventId,
+      date: comp.date || data.header?.competitions?.[0]?.date || '',
       statusState: comp.status?.type?.state || '',
       statusDetail: comp.status?.type?.shortDetail || '',
       clock: comp.status?.displayClock || '',
@@ -234,6 +233,20 @@ const MAIN_STATS = [
   'Corner Kicks',
   'Ball Possession',
 ];
+
+function formatCountdown(dateStr: string): string {
+  const diff = new Date(dateStr).getTime() - Date.now();
+  if (diff <= 0) return 'Starting soon';
+  const totalMins = Math.floor(diff / 60000);
+  const hrs = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  if (hrs > 24) {
+    const days = Math.floor(hrs / 24);
+    return `${days}d ${hrs % 24}h`;
+  }
+  if (hrs > 0) return `${hrs}h ${mins}m`;
+  return `${mins}m`;
+}
 
 const EVENT_ICONS: Record<KeyEvent['type'], { sf: string; material: string; color: string }> = {
   goal: { sf: 'soccerball', material: 'sports-soccer', color: '#4ADE80' },
@@ -585,11 +598,9 @@ export default function MatchScreen() {
       homeTeam: match.home.name,
       homeAbbrev: match.home.abbrev,
       homeScore: match.home.score,
-      homeLogo: match.home.logo ?? null,
       awayTeam: match.away.name,
       awayAbbrev: match.away.abbrev,
       awayScore: match.away.score,
-      awayLogo: match.away.logo ?? null,
       clock: match.clock,
       statusDetail: match.statusDetail,
       leagueName,
@@ -643,11 +654,9 @@ export default function MatchScreen() {
         homeTeam: match.home.name,
         homeAbbrev: match.home.abbrev,
         homeScore: match.home.score,
-        homeLogo: match.home.logo ?? null,
         awayTeam: match.away.name,
         awayAbbrev: match.away.abbrev,
         awayScore: match.away.score,
-        awayLogo: match.away.logo ?? null,
         clock: match.clock,
         statusDetail: match.statusDetail,
         leagueName,
@@ -714,9 +723,7 @@ export default function MatchScreen() {
             {isLive ? (
               <View style={styles.liveBadge}>
                 <RNAnimated.View style={[styles.liveDot, { opacity: pulseAnim }]} />
-                <ThemedText style={styles.liveBadgeText}>
-                  {match.statusDetail}
-                </ThemedText>
+                <ThemedText style={styles.liveBadgeText}>{match.statusDetail}</ThemedText>
               </View>
             ) : (
               <ThemedText style={styles.statusText}>{match.statusDetail}</ThemedText>
@@ -740,10 +747,15 @@ export default function MatchScreen() {
             {/* Score */}
             <View style={styles.heroScore}>
               {match.statusState === 'pre' ? (
-                <ThemedText style={styles.vsText}>vs</ThemedText>
+                <>
+                  <ThemedText style={styles.vsText}>vs</ThemedText>
+                  {match.date ? (
+                    <ThemedText style={styles.periodText}>Starts in {formatCountdown(match.date)}</ThemedText>
+                  ) : null}
+                </>
               ) : (
                 <ThemedText style={styles.scoreText}>
-                   {match.home.score} - {match.away.score}
+                  {match.home.score} - {match.away.score}
                 </ThemedText>
               )}
               {isLive && (
@@ -1242,7 +1254,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   heroScore: { alignItems: 'center', paddingHorizontal: 8 },
-  scoreText: { fontSize: 35, fontWeight: '800', color: TEXT, letterSpacing: 1, paddingTop: 10, },
+  scoreText: { fontSize: 35, fontWeight: '800', color: TEXT, letterSpacing: 1, paddingTop: 10 },
   vsText: { fontSize: 22, fontWeight: '700', color: TEXT_MUTED },
   periodText: { fontSize: 12, color: LIVE_COLOR, fontWeight: '600', marginTop: 4 },
   heroMeta: { alignItems: 'center', marginTop: 16, gap: 4 },
